@@ -23,7 +23,7 @@ def verificar_password(password: str, hash: str) -> bool:
 def crear_token(data: dict) -> str:
     payload = data.copy()
     expiracion = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload.update({"exp": expiracion.timestamp()})
+    payload.update({"exp": expiracion})
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 def verificar_token(token: str) -> dict | None:
