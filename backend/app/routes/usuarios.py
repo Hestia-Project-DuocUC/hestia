@@ -4,15 +4,23 @@ from app.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.usuario import UsuarioCreate, UsuarioResponse
 from app.utils.security import hashear_password
+from app.utils.deps import get_usuario_actual, require_admin
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
 @router.get("/", response_model=list[UsuarioResponse])
-def listar_usuarios(db: Session = Depends(get_db)):
+def listar_usuarios(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
     return db.query(Usuario).all()
 
 @router.post("/", response_model=UsuarioResponse)
-def crear_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
+def crear_usuario(
+    usuario: UsuarioCreate,
+    db: Session = Depends(get_db),
+    admin: Usuario = Depends(require_admin)
+):
     existente = db.query(Usuario).filter(Usuario.email == usuario.email).first()
     if existente:
         raise HTTPException(status_code=400, detail="El email ya está registrado")

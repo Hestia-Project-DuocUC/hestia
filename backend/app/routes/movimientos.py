@@ -4,15 +4,24 @@ from app.database import get_db
 from app.models.movimiento import Movimiento, TipoMovimiento
 from app.models.insumo import Insumo
 from app.schemas.movimiento import MovimientoCreate, MovimientoResponse
+from app.utils.deps import get_usuario_actual, require_admin
+from app.models.usuario import Usuario
 
 router = APIRouter(prefix="/movimientos", tags=["Movimientos"])
 
 @router.get("/", response_model=list[MovimientoResponse])
-def listar_movimientos(db: Session = Depends(get_db)):
+def listar_movimientos(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
     return db.query(Movimiento).all()
 
 @router.post("/", response_model=MovimientoResponse)
-def registrar_movimiento(mov: MovimientoCreate, db: Session = Depends(get_db)):
+def registrar_movimiento(
+    mov: MovimientoCreate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
     insumo = db.query(Insumo).filter(Insumo.id == mov.insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
@@ -34,5 +43,9 @@ def registrar_movimiento(mov: MovimientoCreate, db: Session = Depends(get_db)):
     return nuevo_mov
 
 @router.get("/insumo/{insumo_id}", response_model=list[MovimientoResponse])
-def historial_por_insumo(insumo_id: int, db: Session = Depends(get_db)):
+def historial_por_insumo(
+    insumo_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
     return db.query(Movimiento).filter(Movimiento.insumo_id == insumo_id).all()

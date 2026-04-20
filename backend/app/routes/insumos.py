@@ -3,30 +3,50 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.insumo import Insumo
 from app.schemas.insumo import InsumoCreate, InsumoUpdate, InsumoResponse
+from app.utils.deps import get_usuario_actual, require_admin
+from app.models.usuario import Usuario
 
 router = APIRouter(prefix="/insumos", tags=["Insumos"])
 
+# Cualquier usuario autenticado puede listar y consultar
 @router.get("/", response_model=list[InsumoResponse])
-def listar_insumos(db: Session = Depends(get_db)):
+def listar_insumos(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
     return db.query(Insumo).all()
 
-@router.post("/", response_model=InsumoResponse)
-def crear_insumo(insumo: InsumoCreate, db: Session = Depends(get_db)):
-    nuevo = Insumo(**insumo.model_dump())
-    db.add(nuevo)
-    db.commit()
-    db.refresh(nuevo)
-    return nuevo
-
 @router.get("/{insumo_id}", response_model=InsumoResponse)
-def obtener_insumo(insumo_id: int, db: Session = Depends(get_db)):
+def obtener_insumo(
+    insumo_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
     return insumo
 
+# Solo admin puede crear, actualizar y eliminar
+@router.post("/", response_model=InsumoResponse)
+def crear_insumo(
+    insumo: InsumoCreate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
+    nuevo = Insumo(**insumo.model_dump())
+    db.add(nuevo)
+    db.commit()
+    db.refresh(nuevo)
+    return nuevo
+    
 @router.put("/{insumo_id}", response_model=InsumoResponse)
-def actualizar_insumo(insumo_id: int, datos: InsumoUpdate, db: Session = Depends(get_db)):
+def actualizar_insumo(
+    insumo_id: int,
+    datos: InsumoUpdate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
@@ -37,7 +57,11 @@ def actualizar_insumo(insumo_id: int, datos: InsumoUpdate, db: Session = Depends
     return insumo
 
 @router.delete("/{insumo_id}")
-def eliminar_insumo(insumo_id: int, db: Session = Depends(get_db)):
+def eliminar_insumo(
+    insumo_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
