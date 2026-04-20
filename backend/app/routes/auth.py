@@ -29,11 +29,11 @@ def login(
             detail="Email o contraseña incorrectos"
         )
 
-    token = crear_token({"sub": str(usuario.id), "rol": usuario.rol})
+    token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
 
     return {
         "access_token": token,
         "token_type": "bearer",
         "usuario": usuario.nombre,
-        "rol": usuario.rol
+        "rol": usuario.rol.value
     }

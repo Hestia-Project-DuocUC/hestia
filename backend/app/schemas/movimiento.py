@@ -20,3 +20,16 @@ class MovimientoResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class MovimientoEnriquecido(BaseModel):
+    id: int
+    tipo: TipoMovimiento
+    cantidad: int
+    motivo: str | None = None
+    fecha: datetime
+    insumo: str
+    sala: str | None = None
+    usuario: str
+
+    class Config:
+        from_attributes = True
