@@ -60,7 +60,10 @@ def registrar_movimiento(
     else:
         insumo.stock_actual += mov.cantidad
 
-    nuevo_mov = Movimiento(**mov.model_dump())
+    nuevo_mov = Movimiento(
+        **mov.model_dump(),
+        usuario_id=usuario.id
+    )
     db.add(nuevo_mov)
     db.commit()
     db.refresh(nuevo_mov)

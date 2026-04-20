@@ -7,7 +7,6 @@ class MovimientoCreate(BaseModel):
     cantidad: int
     motivo: str | None = None
     insumo_id: int
-    usuario_id: int
 
 class MovimientoResponse(BaseModel):
     id: int
