@@ -2,18 +2,34 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.categoria import Categoria
-from app.schemas.categoria import CategoriaCreate, CategoriaResponse
-from app.utils.deps import get_usuario_actual, require_admin
 from app.models.usuario import Usuario
+from app.schemas.categoria import CategoriaCreate, CategoriaResponse
+from app.schemas.comun import PaginatedResponse
+from app.utils.deps import get_usuario_actual, require_admin
 
 router = APIRouter(prefix="/categorias", tags=["Categorías"])
 
-@router.get("/", response_model=list[CategoriaResponse])
+@router.get("/", response_model=PaginatedResponse[CategoriaResponse])
 def listar_categorias(
+    skip: int = 0,
+    limit: int = 20,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual)
 ):
-    return db.query(Categoria).all()
+    total = db.query(Categoria).count()
+    categorias = db.query(Categoria).offset(skip).limit(limit).all()
+    return {"total": total, "skip": skip, "limit": limit, "data": categorias}
+
+@router.get("/{categoria_id}", response_model=CategoriaResponse)
+def obtener_categoria(
+    categoria_id: int,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
+    categoria = db.query(Categoria).filter(Categoria.id == categoria_id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    return categoria
 
 @router.post("/", response_model=CategoriaResponse)
 def crear_categoria(
@@ -29,6 +45,22 @@ def crear_categoria(
     db.commit()
     db.refresh(nueva)
     return nueva
+
+@router.put("/{categoria_id}", response_model=CategoriaResponse)
+def actualizar_categoria(
+    categoria_id: int,
+    datos: CategoriaCreate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_admin)
+):
+    categoria = db.query(Categoria).filter(Categoria.id == categoria_id).first()
+    if not categoria:
+        raise HTTPException(status_code=404, detail="Categoría no encontrada")
+    for campo, valor in datos.model_dump(exclude_unset=True).items():
+        setattr(categoria, campo, valor)
+    db.commit()
+    db.refresh(categoria)
+    return categoria
 
 @router.delete("/{categoria_id}")
 def eliminar_categoria(

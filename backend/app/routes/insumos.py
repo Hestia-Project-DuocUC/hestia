@@ -2,19 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.insumo import Insumo
-from app.schemas.insumo import InsumoCreate, InsumoUpdate, InsumoResponse
-from app.utils.deps import get_usuario_actual, require_admin
 from app.models.usuario import Usuario
+from app.schemas.insumo import InsumoCreate, InsumoUpdate, InsumoResponse
+from app.schemas.comun import PaginatedResponse
+from app.utils.deps import get_usuario_actual, require_admin
 
 router = APIRouter(prefix="/insumos", tags=["Insumos"])
 
-# Cualquier usuario autenticado puede listar y consultar
-@router.get("/", response_model=list[InsumoResponse])
+@router.get("/", response_model=PaginatedResponse[InsumoResponse])
 def listar_insumos(
+    skip: int = 0,
+    limit: int = 20,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual)
 ):
-    return db.query(Insumo).all()
+    total = db.query(Insumo).count()
+    insumos = db.query(Insumo).offset(skip).limit(limit).all()
+    return {"total": total, "skip": skip, "limit": limit, "data": insumos}
 
 @router.get("/{insumo_id}", response_model=InsumoResponse)
 def obtener_insumo(
@@ -27,7 +31,6 @@ def obtener_insumo(
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
     return insumo
 
-# Solo admin puede crear, actualizar y eliminar
 @router.post("/", response_model=InsumoResponse)
 def crear_insumo(
     insumo: InsumoCreate,
@@ -39,7 +42,7 @@ def crear_insumo(
     db.commit()
     db.refresh(nuevo)
     return nuevo
-    
+
 @router.put("/{insumo_id}", response_model=InsumoResponse)
 def actualizar_insumo(
     insumo_id: int,
