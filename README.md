@@ -10,7 +10,6 @@ VSCode
 2. Clonar el repositorio
 
 git clone https://github.com/TU_USUARIO/hestia.git
-cd hestia/backend
 
 3. Crear el entorno virtual e instalar dependencias
 
@@ -42,6 +41,9 @@ SQLAlchemy creará todas las tablas automáticamente. Luego ejecutan crear_admin
 Con Alembic, simplemente ejecutan:
 
 alembic upgrade head
+<<<<<<< HEAD
 
 
 ESTA ES DE PRUEBA
+=======
+>>>>>>> e4bfa99dcb6105f2f72ebb5aec330d0743e26450
