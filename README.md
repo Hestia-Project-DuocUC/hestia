@@ -42,3 +42,6 @@ SQLAlchemy creará todas las tablas automáticamente. Luego ejecutan crear_admin
 Con Alembic, simplemente ejecutan:
 
 alembic upgrade head
+
+
+ESTA ES DE PRUEBA
