@@ -10,7 +10,6 @@ VSCode
 2. Clonar el repositorio
 
 git clone https://github.com/TU_USUARIO/hestia.git
-cd hestia/backend
 
 3. Crear el entorno virtual e instalar dependencias
 
