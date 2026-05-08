@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Hestia — Docker Compose
+# Levanta dos servicios: la API (FastAPI) y la base de datos (PostgreSQL 16).
+#
+# Uso:
+#   docker compose up          → levanta todo
+#   docker compose up --build  → reconstruye la imagen de la API y levanta
+#   docker compose down        → apaga los contenedores
+#   docker compose down -v     → apaga Y borra la base de datos (cuidado)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Base de datos PostgreSQL ──────────────────────────────────────────────
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: hestia_pass
+      POSTGRES_DB: hestia_db
+    ports:
+      - "5432:5432"   # Expone postgres para conectarte desde pgAdmin si quieres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # Los datos persisten entre reinicios
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── API FastAPI ───────────────────────────────────────────────────────────
+  api:
+    build: ./backend          # Usa el Dockerfile que está en backend/
+    ports:
+      - "8000:8000"           # La API queda en http://localhost:8000
+    env_file:
+      - ./backend/.env        # Lee las variables de entorno desde tu .env real
+    depends_on:
+      db:
+        condition: service_healthy   # Espera a que postgres esté listo antes de arrancar
+    volumes:
+      - ./backend:/app        # Monta el código local → hot reload funciona
+
+# ── Volúmenes persistentes ────────────────────────────────────────────────────
+volumes:
+  postgres_data:

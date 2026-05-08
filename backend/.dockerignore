@@ -1,0 +1,15 @@
+# Entorno virtual local (no va al contenedor)
+venv/
+.venv/
+
+# Variables de entorno reales (nunca al repo ni al contenedor)
+.env
+
+# Caché de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Archivos del editor
+.vscode/
+.idea/
