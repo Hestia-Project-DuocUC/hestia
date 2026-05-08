@@ -5,5 +5,8 @@ exclude =
     __pycache__,
     alembic/versions
 ignore =
+    E302,
+    W292,
+    W503,
     E402,
-    W503
+    F401

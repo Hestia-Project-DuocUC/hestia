@@ -1,5 +1,4 @@
 from pydantic import BaseModel
-from app.models.movimiento import TipoMovimiento
 
 class InsumoCreate(BaseModel):
     nombre: str
