@@ -1,5 +1,6 @@
 # Entorno virtual
-backend/venv/
+.venv/
+venv/
 
 # Variables de entorno (credenciales)
 backend/.env
