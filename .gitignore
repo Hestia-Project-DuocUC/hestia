@@ -3,7 +3,7 @@
 venv/
 
 # Variables de entorno (credenciales)
-backend/.env
+.env
 
 # Cache de Python
 __pycache__/
@@ -15,4 +15,4 @@ __pycache__/
 Thumbs.db
 
 # VSCode
-backend/.vscode/
+.vscode/
