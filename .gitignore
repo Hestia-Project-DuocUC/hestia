@@ -16,3 +16,8 @@ Thumbs.db
 
 # VSCode
 .vscode/
+
+# Ignorar .vite
+node_modules/
+dist/
+.vite/
