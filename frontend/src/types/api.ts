@@ -12,6 +12,19 @@ export interface LoginResponse {
   pre_token: string | null
 }
 
+export interface UsuarioMe {
+  id: number
+  nombre: string
+  email: string
+  rol: string
+  totp_habilitado: boolean
+}
+
+export interface Setup2FAResponse {
+  qr_code: string   // data URL PNG en base64
+  secret: string    // clave manual de respaldo
+}
+
 export interface ResumenResponse {
   total_insumos: number
   insumos_bajo_stock: number

@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { Login } from './pages/Login'
-import { Dashboard } from './pages/Dashboard'
-import { Alertas } from './pages/Alertas'
-import { Insumos } from './pages/Insumos'
-import { Layout } from './components/layout/Layout'
+import { Login }            from './pages/Login'
+import { Dashboard }        from './pages/Dashboard'
+import { Alertas }          from './pages/Alertas'
+import { Insumos }          from './pages/Insumos'
+import { Configuracion2FA } from './pages/Configuracion2FA'
+import { Layout }           from './components/layout/Layout'
 
 export function App() {
   return (
@@ -13,8 +14,9 @@ export function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
-          <Route path="alertas" element={<Alertas />} />
-          <Route path="insumos" element={<Insumos />} />
+          <Route path="alertas"   element={<Alertas />} />
+          <Route path="insumos"   element={<Insumos />} />
+          <Route path="seguridad" element={<Configuracion2FA />} />
         </Route>
       </Routes>
     </BrowserRouter>
