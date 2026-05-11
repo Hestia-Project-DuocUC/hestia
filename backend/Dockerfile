@@ -12,8 +12,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Ahora sí copiamos el resto del código
 COPY . .
 
+# Dar permisos de ejecución al script de arranque
+RUN chmod +x start.sh
+
 # Puerto que expone la API
 EXPOSE 8000
 
-# Comando para levantar el servidor
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Usar el script de arranque en vez de llamar a uvicorn directamente
+CMD ["sh", "start.sh"]
