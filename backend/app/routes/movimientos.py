@@ -8,9 +8,10 @@ from app.models.usuario import Usuario
 from app.models.sala import Sala
 from app.schemas.movimiento import MovimientoCreate, MovimientoResponse, MovimientoEnriquecido
 from app.schemas.comun import PaginatedResponse
-from app.utils.deps import get_usuario_actual
+from app.utils.deps import get_usuario_actual, require_operador
 
 router = APIRouter(prefix="/movimientos", tags=["Movimientos"])
+
 
 def _enriquecer(m: Movimiento) -> MovimientoEnriquecido:
     return MovimientoEnriquecido(
@@ -24,6 +25,7 @@ def _enriquecer(m: Movimiento) -> MovimientoEnriquecido:
         usuario=m.usuario.nombre if m.usuario else "Desconocido"
     )
 
+
 def _query_enriquecida(db: Session):
     return (
         db.query(Movimiento)
@@ -34,12 +36,13 @@ def _query_enriquecida(db: Session):
         .order_by(desc(Movimiento.fecha))
     )
 
+
 @router.get("/", response_model=PaginatedResponse[MovimientoEnriquecido])
 def listar_movimientos(
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual)
+    usuario: Usuario = Depends(get_usuario_actual)  # visor, operador y admin
 ):
     total = db.query(Movimiento).count()
     movimientos = _query_enriquecida(db).offset(skip).limit(limit).all()
@@ -50,11 +53,12 @@ def listar_movimientos(
         "data": [_enriquecer(m) for m in movimientos]
     }
 
+
 @router.post("/", response_model=MovimientoResponse)
 def registrar_movimiento(
     mov: MovimientoCreate,
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual)
+    usuario: Usuario = Depends(require_operador)  # operador y admin
 ):
     insumo = db.query(Insumo).filter(Insumo.id == mov.insumo_id).first()
     if not insumo:
@@ -76,13 +80,14 @@ def registrar_movimiento(
     db.refresh(nuevo_mov)
     return nuevo_mov
 
+
 @router.get("/insumo/{insumo_id}", response_model=PaginatedResponse[MovimientoEnriquecido])
 def historial_por_insumo(
     insumo_id: int,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual)
+    usuario: Usuario = Depends(get_usuario_actual)  # visor, operador y admin
 ):
     if not db.query(Insumo).filter(Insumo.id == insumo_id).first():
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
@@ -99,13 +104,14 @@ def historial_por_insumo(
         "data": [_enriquecer(m) for m in movimientos]
     }
 
+
 @router.get("/sala/{sala_id}", response_model=PaginatedResponse[MovimientoEnriquecido])
 def historial_por_sala(
     sala_id: int,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual)
+    usuario: Usuario = Depends(get_usuario_actual)  # visor, operador y admin
 ):
     if not db.query(Sala).filter(Sala.id == sala_id).first():
         raise HTTPException(status_code=404, detail="Sala no encontrada")
