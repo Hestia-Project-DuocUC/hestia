@@ -59,7 +59,7 @@ Esto automáticamente:
 
 | Campo | Valor |
 |---|---|
-| Email | `gutierrezluis2203@hestia.cl` |
+| Email | `adminrole@hestia.cl` |
 | Password | `admin123` |
 
 ### Comandos útiles
