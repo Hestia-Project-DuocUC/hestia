@@ -17,11 +17,7 @@ from app.utils.deps import require_admin
 router = APIRouter(prefix="/importar", tags=["Importacion"])
 
 TOTP_VALID_WINDOW = 1
-
-# Columnas que acepta el sistema. Las marcadas como requeridas deben estar presentes.
 COLUMNAS_REQUERIDAS = {"nombre", "stock_actual", "stock_minimo"}
-COLUMNAS_OPCIONALES = {"descripcion", "sala", "categoria"}
-TODAS_COLUMNAS = COLUMNAS_REQUERIDAS | COLUMNAS_OPCIONALES
 
 
 class ErrorFila(BaseModel):
@@ -40,7 +36,7 @@ class ImportarResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _verificar_totp(usuario: Usuario, codigo: str) -> None:
-    """Lanza 401 si el codigo TOTP no es valido o 2FA no esta habilitado."""
+    """Lanza error si el codigo TOTP no es valido o 2FA no esta habilitado."""
     if not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -54,12 +50,21 @@ def _verificar_totp(usuario: Usuario, codigo: str) -> None:
         )
 
 
+def _fila_xlsx_a_dict(encabezados: list, fila: tuple) -> dict:
+    """Convierte una fila de XLSX a dict usando los encabezados."""
+    return {
+        encabezados[i]: (str(v).strip() if v is not None else "")
+        for i, v in enumerate(fila)
+    }
+
+
 def _leer_filas(contenido: bytes, nombre_archivo: str) -> list[dict]:
     """Parsea CSV o XLSX y devuelve una lista de dicts con las filas."""
     extension = nombre_archivo.rsplit(".", 1)[-1].lower()
 
     if extension == "csv":
-        texto = contenido.decode("utf-8-sig")  # utf-8-sig elimina el BOM de Windows
+        # utf-8-sig elimina el BOM que genera Excel en Windows
+        texto = contenido.decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(texto))
         return [dict(fila) for fila in reader]
 
@@ -68,20 +73,19 @@ def _leer_filas(contenido: bytes, nombre_archivo: str) -> list[dict]:
             import openpyxl
         except ImportError:
             raise HTTPException(status_code=500, detail="openpyxl no instalado.")
-        wb = openpyxl.load_workbook(io.BytesIO(contenido), read_only=True, data_only=True)
+        wb = openpyxl.load_workbook(
+            io.BytesIO(contenido), read_only=True, data_only=True
+        )
         ws = wb.active
         filas = list(ws.iter_rows(values_only=True))
         if not filas:
             return []
         encabezados = [str(c).strip().lower() if c else "" for c in filas[0]]
-        resultado = []
-        for fila in filas[1:]:
-            if all(c is None for c in fila):
-                continue  # fila completamente vacia
-            resultado.append(
-                {encabezados[i]: (str(v).strip() if v is not None else "") for i, v in enumerate(fila)}
-            )
-        return resultado
+        return [
+            _fila_xlsx_a_dict(encabezados, fila)
+            for fila in filas[1:]
+            if not all(c is None for c in fila)
+        ]
 
     else:
         raise HTTPException(
@@ -93,7 +97,10 @@ def _leer_filas(contenido: bytes, nombre_archivo: str) -> list[dict]:
 def _normalizar_encabezados(filas: list[dict]) -> list[dict]:
     """Convierte todas las claves a minusculas y elimina espacios."""
     return [
-        {k.strip().lower(): v.strip() if isinstance(v, str) else v for k, v in fila.items()}
+        {
+            k.strip().lower(): v.strip() if isinstance(v, str) else v
+            for k, v in fila.items()
+        }
         for fila in filas
     ]
 
@@ -101,15 +108,12 @@ def _normalizar_encabezados(filas: list[dict]) -> list[dict]:
 def _buscar_o_crear_sala(nombre: str, db: Session) -> Optional[int]:
     if not nombre:
         return None
-    sala = db.query(Sala).filter(
-        Sala.nombre.ilike(nombre.strip())
-    ).first()
+    sala = db.query(Sala).filter(Sala.nombre.ilike(nombre.strip())).first()
     if sala:
         return sala.id
-    # Si no existe, la crea automaticamente
     nueva = Sala(nombre=nombre.strip())
     db.add(nueva)
-    db.flush()  # obtiene el id sin hacer commit todavia
+    db.flush()
     return nueva.id
 
 
@@ -134,7 +138,8 @@ def _procesar_filas(
     importados = 0
     errores: list[ErrorFila] = []
 
-    for idx, fila in enumerate(filas, start=2):  # start=2 porque fila 1 es el encabezado
+    # start=2 porque la fila 1 es el encabezado del CSV
+    for idx, fila in enumerate(filas, start=2):
         nombre = fila.get("nombre", "").strip()
         if not nombre:
             errores.append(ErrorFila(fila=idx, razon="Campo 'nombre' vacio o ausente."))
@@ -145,7 +150,8 @@ def _procesar_filas(
         except (ValueError, TypeError):
             errores.append(ErrorFila(
                 fila=idx,
-                razon=f"'stock_actual' no es un numero valido: '{fila.get('stock_actual')}'"
+                razon=f"'stock_actual' no es un numero valido: "
+                      f"'{fila.get('stock_actual')}'"
             ))
             continue
 
@@ -154,13 +160,15 @@ def _procesar_filas(
         except (ValueError, TypeError):
             errores.append(ErrorFila(
                 fila=idx,
-                razon=f"'stock_minimo' no es un numero valido: '{fila.get('stock_minimo')}'"
+                razon=f"'stock_minimo' no es un numero valido: "
+                      f"'{fila.get('stock_minimo')}'"
             ))
             continue
 
         if stock_actual < 0 or stock_minimo < 0:
             errores.append(ErrorFila(
-                fila=idx, razon="Los valores de stock no pueden ser negativos."
+                fila=idx,
+                razon="Los valores de stock no pueden ser negativos."
             ))
             continue
 
@@ -189,26 +197,27 @@ def _procesar_filas(
 def descargar_plantilla(
     usuario: Usuario = Depends(require_admin)
 ):
-    """Descarga un CSV de ejemplo con el formato exacto que espera el importador.
-    Solo accesible para administradores.
-    """
+    """Descarga un CSV de ejemplo con el formato esperado por el importador."""
     filas = [
         ["nombre", "descripcion", "stock_actual", "stock_minimo", "sala", "categoria"],
-        ["Guantes de nitrilo talla M", "Caja x100 unidades", "50", "20",
-         "Laboratorio Clinico", "Proteccion personal"],
-        ["Mascarilla KN95", "", "30", "15", "Sala de Simulacion", "Proteccion personal"],
-        ["Jeringa 5ml", "Con aguja 21G", "200", "50", "Sala de Procedimientos", "Insumos clinicos"],
+        ["Guantes de nitrilo talla M", "Caja x100 unidades",
+         "50", "20", "Laboratorio Clinico", "Proteccion personal"],
+        ["Mascarilla KN95", "",
+         "30", "15", "Sala de Simulacion", "Proteccion personal"],
+        ["Jeringa 5ml", "Con aguja 21G",
+         "200", "50", "Sala de Procedimientos", "Insumos clinicos"],
         ["Alcohol isopropilico 70%", "Frasco 500ml", "10", "5", "", "Desinfeccion"],
     ]
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerows(filas)
     output.seek(0)
-
     return StreamingResponse(
-        io.BytesIO(output.getvalue().encode("utf-8-sig")),  # BOM para Excel en Windows
+        io.BytesIO(output.getvalue().encode("utf-8-sig")),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=plantilla_insumos_hestia.csv"}
+        headers={
+            "Content-Disposition": "attachment; filename=plantilla_insumos_hestia.csv"
+        }
     )
 
 
@@ -219,23 +228,9 @@ def importar_insumos(
     usuario: Usuario = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """Importa insumos desde un archivo CSV o XLSX.
-
-    Seguridad: requiere rol admin + codigo TOTP valido.
-    El archivo es procesado solo si ambas verificaciones pasan.
-
-    Columnas soportadas:
-    - nombre (requerido)
-    - stock_actual (requerido, entero)
-    - stock_minimo (requerido, entero)
-    - descripcion (opcional)
-    - sala (opcional, se crea si no existe)
-    - categoria (opcional, se crea si no existe)
-    """
-    # 1. Verificar TOTP antes de leer el archivo
+    """Importa insumos desde CSV o XLSX. Requiere rol admin + TOTP valido."""
     _verificar_totp(usuario, codigo_totp)
 
-    # 2. Validar tipo de archivo
     nombre = archivo.filename or ""
     if not nombre.lower().endswith((".csv", ".xlsx", ".xls")):
         raise HTTPException(
@@ -243,7 +238,6 @@ def importar_insumos(
             detail="Solo se aceptan archivos .csv o .xlsx"
         )
 
-    # 3. Leer y parsear
     contenido = archivo.file.read()
     filas_raw = _leer_filas(contenido, nombre)
     filas = _normalizar_encabezados(filas_raw)
@@ -251,20 +245,17 @@ def importar_insumos(
     if not filas:
         raise HTTPException(status_code=400, detail="El archivo esta vacio.")
 
-    # 4. Validar que esten las columnas requeridas
     columnas_archivo = set(filas[0].keys())
     faltantes = COLUMNAS_REQUERIDAS - columnas_archivo
     if faltantes:
+        cols = ', '.join(sorted(faltantes))
         raise HTTPException(
             status_code=400,
-            detail=f"Columnas requeridas faltantes: {', '.join(sorted(faltantes))}. "
-                   f"Descarga la plantilla desde GET /importar/plantilla"
+            detail=f"Columnas faltantes: {cols}. Descarga la plantilla para ver el formato."
         )
 
-    # 5. Procesar e insertar
     importados, errores = _procesar_filas(filas, db)
 
-    # Solo hace commit si hubo al menos un insumo valido
     if importados > 0:
         db.commit()
     else:

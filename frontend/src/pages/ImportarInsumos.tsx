@@ -23,24 +23,22 @@ const COLUMNAS = ['nombre', 'descripcion', 'stock_actual', 'stock_minimo', 'sala
 const REQUERIDAS = ['nombre', 'stock_actual', 'stock_minimo']
 
 export function ImportarInsumos() {
-  const [estado, setEstado]         = useState<Estado>('idle')
-  const [archivo, setArchivo]       = useState<File | null>(null)
-  const [preview, setPreview]       = useState<string[][]>([])
-  const [codigoTotp, setCodigoTotp] = useState('')
-  const [resultado, setResultado]   = useState<ImportarResponse | null>(null)
-  const [error, setError]           = useState<string | null>(null)
-  const [dragOver, setDragOver]     = useState(false)
-  const [segundos, setSegundos]     = useState(30)
+  const [estado, setEstado]               = useState<Estado>('idle')
+  const [archivo, setArchivo]             = useState<File | null>(null)
+  const [preview, setPreview]             = useState<string[][]>([])
+  const [codigoTotp, setCodigoTotp]       = useState('')
+  const [resultado, setResultado]         = useState<ImportarResponse | null>(null)
+  const [error, setError]                 = useState<string | null>(null)
+  const [dragOver, setDragOver]           = useState(false)
+  const [segundos, setSegundos]           = useState(30)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Countdown TOTP de 30s
   useEffect(() => {
     if (estado !== 'totp') return
     const ahora = Math.floor(Date.now() / 1000)
     setSegundos(30 - (ahora % 30))
     const interval = setInterval(() => {
-      const s = 30 - (Math.floor(Date.now() / 1000) % 30)
-      setSegundos(s)
+      setSegundos(30 - (Math.floor(Date.now() / 1000) % 30))
     }, 1000)
     return () => clearInterval(interval)
   }, [estado])
@@ -83,13 +81,14 @@ export function ImportarInsumos() {
       const form = new FormData()
       form.append('archivo', archivo)
       form.append('codigo_totp', codigoTotp)
-      const { data } = await api.post<ImportarResponse>('/importar/insumos', form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
+      // IMPORTANTE: NO setear Content-Type manualmente.
+      // Axios lo hace automaticamente con el boundary correcto para multipart/form-data.
+      const { data } = await api.post<ImportarResponse>('/importar/insumos', form)
       setResultado(data)
       setEstado('resultado')
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+      const msg = (err as { response?: { data?: { detail?: string } } })
+        .response?.data?.detail
       setError(msg ?? 'Error al importar el archivo.')
       setEstado('totp')
     }
@@ -115,11 +114,17 @@ export function ImportarInsumos() {
   }
 
   const pctSegundos = (segundos / 30) * 100
-  const colorCountdown = segundos <= 5 ? 'text-rose-500' : segundos <= 10 ? 'text-amber-500' : 'text-teal-600'
+  const colorCountdown =
+    segundos <= 5 ? 'text-rose-500' :
+    segundos <= 10 ? 'text-amber-500' :
+    'text-teal-600'
+  const strokeColor =
+    segundos <= 5 ? '#f43f5e' :
+    segundos <= 10 ? '#f59e0b' :
+    '#0d9488'
 
   return (
     <div className="p-8 max-w-2xl mx-auto">
-      {/* Header */}
       <div className="mb-8">
         <Link to="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 font-semibold mb-4"
@@ -129,9 +134,7 @@ export function ImportarInsumos() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-black text-slate-900">Importar insumos</h1>
-            <p className="text-slate-500 text-sm mt-0.5">
-              Carga masiva desde CSV o XLSX. Requiere codigo 2FA.
-            </p>
+            <p className="text-slate-500 text-sm mt-0.5">Carga masiva desde CSV o XLSX. Requiere codigo 2FA.</p>
           </div>
           <button
             onClick={descargarPlantilla}
@@ -143,10 +146,8 @@ export function ImportarInsumos() {
         </div>
       </div>
 
-      {/* ESTADO: idle — dropzone */}
       {(estado === 'idle' || estado === 'archivo') && (
         <div className="space-y-5">
-          {/* Formato esperado */}
           <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Columnas esperadas</p>
             <div className="flex flex-wrap gap-2">
@@ -163,7 +164,6 @@ export function ImportarInsumos() {
             <p className="text-xs text-slate-400 mt-2">* Columnas requeridas</p>
           </div>
 
-          {/* Dropzone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
@@ -172,28 +172,20 @@ export function ImportarInsumos() {
             className={`
               relative border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer
               transition-all duration-200
-              ${ dragOver
-                ? 'border-teal-500 bg-teal-50'
-                : archivo
-                ? 'border-teal-400 bg-teal-50/50'
-                : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50'
-              }
+              ${ dragOver ? 'border-teal-500 bg-teal-50'
+                : archivo ? 'border-teal-400 bg-teal-50/50'
+                : 'border-slate-300 hover:border-teal-400 hover:bg-slate-50' }
             `}
           >
             <input
-              ref={inputRef}
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
+              ref={inputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) seleccionarArchivo(f) }}
             />
             {archivo ? (
               <>
                 <FileSpreadsheet size={40} className="mx-auto mb-3 text-teal-600" />
                 <p className="font-bold text-teal-700">{archivo.name}</p>
-                <p className="text-slate-500 text-sm mt-1">
-                  {(archivo.size / 1024).toFixed(1)} KB
-                </p>
+                <p className="text-slate-500 text-sm mt-1">{(archivo.size / 1024).toFixed(1)} KB</p>
                 <p className="text-xs text-slate-400 mt-2">Haz clic para cambiar el archivo</p>
               </>
             ) : (
@@ -201,12 +193,11 @@ export function ImportarInsumos() {
                 <Upload size={40} className="mx-auto mb-3 text-slate-400" />
                 <p className="font-semibold text-slate-700">Arrastra tu archivo aqui</p>
                 <p className="text-slate-400 text-sm mt-1">o haz clic para buscarlo</p>
-                <p className="text-xs text-slate-300 mt-3">CSV o XLSX, maximo 10MB</p>
+                <p className="text-xs text-slate-300 mt-3">CSV o XLSX</p>
               </>
             )}
           </div>
 
-          {/* Preview CSV */}
           {preview.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
               <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50">
@@ -219,9 +210,7 @@ export function ImportarInsumos() {
                   <thead>
                     <tr className="border-b border-slate-100">
                       {(preview[0] ?? []).map((h, i) => (
-                        <th key={i} className="px-3 py-2 text-left font-bold text-slate-600">
-                          {h.trim()}
-                        </th>
+                        <th key={i} className="px-3 py-2 text-left font-bold text-slate-600">{h.trim()}</th>
                       ))}
                     </tr>
                   </thead>
@@ -257,7 +246,6 @@ export function ImportarInsumos() {
         </div>
       )}
 
-      {/* ESTADO: totp */}
       {estado === 'totp' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
           <div className="flex items-center gap-3 mb-6">
@@ -267,33 +255,28 @@ export function ImportarInsumos() {
             <div>
               <p className="font-bold text-slate-900">Verificacion de seguridad</p>
               <p className="text-slate-500 text-sm">
-                Ingresa tu codigo TOTP para autorizar la importacion de <strong>{archivo?.name}</strong>.
+                Autoriza la importacion de <strong>{archivo?.name}</strong>.
               </p>
             </div>
           </div>
-
           <form onSubmit={handleSubir} className="space-y-5">
-            {/* Input TOTP + countdown */}
             <div className="relative">
               <input
                 type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
                 value={codigoTotp}
                 onChange={(e) => { setCodigoTotp(e.target.value.replace(/\D/g, '')); setError(null) }}
-                placeholder="000000"
-                autoFocus
+                placeholder="000000" autoFocus
                 className="w-full px-4 py-5 rounded-xl border-2 border-slate-200
                            text-slate-900 text-4xl text-center font-black tracking-[0.7em]
                            focus:outline-none focus:border-teal-500 bg-slate-50 focus:bg-white
                            placeholder:text-slate-200 transition-colors"
               />
-              {/* Countdown ring */}
               <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col items-center">
                 <svg width="36" height="36" className="-rotate-90">
                   <circle cx="18" cy="18" r="14" fill="none" stroke="#e2e8f0" strokeWidth="3" />
                   <circle
                     cx="18" cy="18" r="14" fill="none"
-                    stroke={segundos <= 5 ? '#f43f5e' : segundos <= 10 ? '#f59e0b' : '#0d9488'}
-                    strokeWidth="3"
+                    stroke={strokeColor} strokeWidth="3"
                     strokeDasharray={`${2 * Math.PI * 14}`}
                     strokeDashoffset={`${2 * Math.PI * 14 * (1 - pctSegundos / 100)}`}
                     strokeLinecap="round"
@@ -303,25 +286,20 @@ export function ImportarInsumos() {
                 <span className={`text-xs font-black -mt-7 ${colorCountdown}`}>{segundos}</span>
               </div>
             </div>
-
             {error && (
               <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200 px-4 py-3 rounded-xl font-semibold">
                 {error}
               </p>
             )}
-
             <button
-              type="submit"
-              disabled={codigoTotp.length !== 6}
+              type="submit" disabled={codigoTotp.length !== 6}
               className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700
                          text-white font-bold py-3 rounded-xl transition-colors
                          disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Upload size={16} /> Importar insumos
             </button>
-            <button
-              type="button"
-              onClick={() => setEstado('archivo')}
+            <button type="button" onClick={() => setEstado('archivo')}
               className="w-full py-2 text-sm text-slate-400 hover:text-slate-600 font-semibold"
             >
               ← Volver al archivo
@@ -330,7 +308,6 @@ export function ImportarInsumos() {
         </div>
       )}
 
-      {/* ESTADO: cargando */}
       {estado === 'cargando' && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
           <RefreshCw size={40} className="mx-auto mb-4 text-teal-600 animate-spin" />
@@ -339,16 +316,12 @@ export function ImportarInsumos() {
         </div>
       )}
 
-      {/* ESTADO: resultado */}
       {estado === 'resultado' && resultado && (
         <div className="space-y-4">
-          {/* Resumen */}
           <div className={`rounded-2xl border p-6 ${
-            resultado.omitidos === 0
-              ? 'bg-teal-50 border-teal-200'
-              : resultado.importados === 0
-              ? 'bg-rose-50 border-rose-200'
-              : 'bg-amber-50 border-amber-200'
+            resultado.omitidos === 0 ? 'bg-teal-50 border-teal-200'
+            : resultado.importados === 0 ? 'bg-rose-50 border-rose-200'
+            : 'bg-amber-50 border-amber-200'
           }`}>
             <div className="flex items-center gap-3 mb-4">
               {resultado.importados > 0
@@ -371,7 +344,6 @@ export function ImportarInsumos() {
             </div>
           </div>
 
-          {/* Detalle de errores */}
           {resultado.errores.length > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center gap-2">
