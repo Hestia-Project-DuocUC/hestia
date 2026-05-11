@@ -1,15 +1,16 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Package,
-  LogOut, User, ShieldCheck
+  LogOut, User, ShieldCheck, Upload
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { Logo } from '../ui/Logo'
 
 const navItems = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard'  },
-  { to: '/alertas',   icon: AlertTriangle,   label: 'Alertas'    },
-  { to: '/insumos',   icon: Package,         label: 'Insumos'    },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard',  roles: ['admin', 'operador', 'visor'] },
+  { to: '/alertas',   icon: AlertTriangle,   label: 'Alertas',    roles: ['admin', 'operador', 'visor'] },
+  { to: '/insumos',   icon: Package,         label: 'Insumos',    roles: ['admin', 'operador', 'visor'] },
+  { to: '/importar',  icon: Upload,          label: 'Importar',   roles: ['admin'] },
 ]
 
 export function Sidebar() {
@@ -30,6 +31,10 @@ export function Sidebar() {
     }
   `
 
+  const itemsVisibles = navItems.filter(
+    (item) => user?.rol && item.roles.includes(user.rol)
+  )
+
   return (
     <aside className="w-60 min-h-screen bg-slate-900 flex flex-col border-r border-slate-800 flex-shrink-0">
       {/* Logo + Brand */}
@@ -43,9 +48,9 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* Navegación principal */}
+      {/* Navegacion */}
       <nav className="flex-1 px-3 py-5 space-y-1">
-        {navItems.map(({ to, icon: Icon, label }) => (
+        {itemsVisibles.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} className={navLinkCls}>
             <Icon size={17} />
             {label}
@@ -53,7 +58,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Sección inferior: seguridad + usuario + logout */}
+      {/* Seccion inferior */}
       <div className="px-3 pb-5 border-t border-slate-800 pt-4 space-y-1">
         <NavLink to="/seguridad" className={navLinkCls}>
           <ShieldCheck size={17} />
@@ -77,7 +82,7 @@ export function Sidebar() {
                      text-sm font-semibold transition-colors duration-150"
         >
           <LogOut size={17} />
-          Cerrar sesión
+          Cerrar sesion
         </button>
       </div>
     </aside>
