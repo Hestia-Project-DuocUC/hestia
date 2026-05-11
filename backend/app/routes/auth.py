@@ -17,6 +17,11 @@ from app.utils.deps import get_usuario_actual
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 
+# Ventana de tolerancia para verificacion TOTP.
+# valid_window=1 acepta el intervalo anterior y el siguiente (+/- 30s).
+# Necesario para compensar desfases de reloj entre el servidor y el dispositivo.
+TOTP_VALID_WINDOW = 1
+
 
 # ---------------------------------------------------------------------------
 # Modelos de request / response
@@ -112,7 +117,7 @@ def completar_login_2fa(datos: Completar2FARequest, db: Session = Depends(get_db
         )
 
     totp = pyotp.TOTP(usuario.totp_secret)
-    if not totp.verify(datos.codigo):
+    if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo 2FA incorrecto"
@@ -162,7 +167,7 @@ def activar_2fa(
         )
 
     totp = pyotp.TOTP(usuario.totp_secret)
-    if not totp.verify(datos.codigo):
+    if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo incorrecto. Asegurate de haber escaneado el QR."
@@ -184,7 +189,7 @@ def desactivar_2fa(
         raise HTTPException(status_code=400, detail="El 2FA no esta habilitado")
 
     totp = pyotp.TOTP(usuario.totp_secret)
-    if not totp.verify(datos.codigo):
+    if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo incorrecto"
