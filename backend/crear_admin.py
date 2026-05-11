@@ -17,7 +17,7 @@ Base.metadata.create_all(bind=engine)
 db = SessionLocal()
 
 # Verificar si el admin ya existe
-email = "gutierrezluis2203@hestia.cl"
+email = "adminrole@hestia.cl"
 admin_existente = db.query(Usuario).filter(Usuario.email == email).first()
 
 if admin_existente:
@@ -29,7 +29,7 @@ if admin_existente:
         print(f"Rol actualizado a admin")
 else:
     admin = Usuario(
-        nombre="Luis Gutiérrez",
+        nombre="Admin",
         email=email,
         password_hash=hashear_password("admin123"),
         rol=RolUsuario.admin
