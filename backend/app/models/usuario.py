@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Enum, Boolean, Text
 from sqlalchemy.orm import relationship
 from app.database import Base
 import enum
@@ -19,8 +19,13 @@ class Usuario(Base):
     password_hash = Column(String, nullable=False)
     rol = Column(Enum(RolUsuario), default=RolUsuario.visor)
 
-    # 2FA (TOTP compatible con Google Authenticator)
-    totp_secret = Column(String, nullable=True)        # secreto compartido, se guarda cifrado en DB
+    # 2FA TOTP
+    totp_secret = Column(String, nullable=True)
     totp_habilitado = Column(Boolean, default=False, nullable=False)
+
+    # Codigos de recuperacion: JSON list de {"hash": str, "usado": bool}
+    # Los hashes son SHA-256 de los codigos en texto plano.
+    # Los codigos planos se muestran UNA sola vez al activar 2FA.
+    totp_recovery_codes = Column(Text, nullable=True)
 
     movimientos = relationship("Movimiento", back_populates="usuario")

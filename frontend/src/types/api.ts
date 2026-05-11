@@ -1,6 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tipos TypeScript que reflejan los schemas del backend de Hestia.
-// Mantener sincronizados con los Pydantic schemas en backend/app/schemas/
+// Tipos TypeScript sincronizados con los schemas Pydantic del backend.
 // ---------------------------------------------------------------------------
 
 export interface LoginResponse {
@@ -21,8 +20,13 @@ export interface UsuarioMe {
 }
 
 export interface Setup2FAResponse {
-  qr_code: string   // data URL PNG en base64
-  secret: string    // clave manual de respaldo
+  qr_code: string
+  secret: string
+}
+
+export interface ActivarResponse {
+  mensaje: string
+  recovery_codes: string[]   // 10 codigos — mostrar UNA sola vez
 }
 
 export interface ResumenResponse {
@@ -53,6 +57,18 @@ export interface InsumoResponse {
   stock_minimo: number
   sala_id: number | null
   categoria_id: number | null
+}
+
+export interface SalaResponse {
+  id: number
+  nombre: string
+  tipo: string | null
+  descripcion: string | null
+}
+
+export interface CategoriaResponse {
+  id: number
+  nombre: string
 }
 
 export interface PaginatedResponse<T> {

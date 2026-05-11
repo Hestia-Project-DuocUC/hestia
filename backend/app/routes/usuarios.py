@@ -9,6 +9,7 @@ from app.utils.security import hashear_password
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
+
 @router.get("/", response_model=PaginatedResponse[UsuarioResponse])
 def listar_usuarios(
     skip: int = 0,
@@ -20,9 +21,11 @@ def listar_usuarios(
     usuarios = db.query(Usuario).offset(skip).limit(limit).all()
     return {"total": total, "skip": skip, "limit": limit, "data": usuarios}
 
+
 @router.get("/me", response_model=UsuarioResponse)
 def perfil_propio(usuario: Usuario = Depends(get_usuario_actual)):
     return usuario
+
 
 @router.get("/{usuario_id}", response_model=UsuarioResponse)
 def obtener_usuario(
@@ -30,10 +33,11 @@ def obtener_usuario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    usuario_encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-    if not usuario_encontrado:
+    encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not encontrado:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return usuario_encontrado
+    return encontrado
+
 
 @router.post("/", response_model=UsuarioResponse)
 def crear_usuario(
@@ -43,7 +47,7 @@ def crear_usuario(
 ):
     existente = db.query(Usuario).filter(Usuario.email == datos.email).first()
     if existente:
-        raise HTTPException(status_code=400, detail="El email ya está registrado")
+        raise HTTPException(status_code=400, detail="El email ya esta registrado")
     nuevo = Usuario(
         nombre=datos.nombre,
         email=datos.email,
@@ -55,6 +59,7 @@ def crear_usuario(
     db.refresh(nuevo)
     return nuevo
 
+
 @router.put("/{usuario_id}", response_model=UsuarioResponse)
 def actualizar_usuario(
     usuario_id: int,
@@ -62,16 +67,17 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    usuario_encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-    if not usuario_encontrado:
+    encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not encontrado:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    usuario_encontrado.nombre = datos.nombre
-    usuario_encontrado.email = datos.email
-    usuario_encontrado.password_hash = hashear_password(datos.password)
-    usuario_encontrado.rol = datos.rol
+    encontrado.nombre = datos.nombre
+    encontrado.email = datos.email
+    encontrado.password_hash = hashear_password(datos.password)
+    encontrado.rol = datos.rol
     db.commit()
-    db.refresh(usuario_encontrado)
-    return usuario_encontrado
+    db.refresh(encontrado)
+    return encontrado
+
 
 @router.delete("/{usuario_id}")
 def eliminar_usuario(
@@ -79,11 +85,32 @@ def eliminar_usuario(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    usuario_encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
-    if not usuario_encontrado:
+    encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not encontrado:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if usuario_encontrado.id == usuario.id:
-        raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
-    db.delete(usuario_encontrado)
+    if encontrado.id == usuario.id:
+        raise HTTPException(
+            status_code=400, detail="No puedes eliminarte a ti mismo"
+        )
+    db.delete(encontrado)
     db.commit()
     return {"mensaje": "Usuario eliminado"}
+
+
+@router.post("/{usuario_id}/reset-2fa")
+def reset_2fa_usuario(
+    usuario_id: int,
+    db: Session = Depends(get_db),
+    admin: Usuario = Depends(require_admin)
+):
+    """Desactiva el 2FA de cualquier usuario. Solo administradores.
+    Util para recuperacion de acceso cuando el usuario perdio su dispositivo.
+    """
+    target = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    target.totp_habilitado = False
+    target.totp_secret = None
+    target.totp_recovery_codes = None
+    db.commit()
+    return {"mensaje": f"2FA desactivado para {target.email}"}
