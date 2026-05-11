@@ -10,7 +10,9 @@ import base64
 
 from app.database import get_db
 from app.models.usuario import Usuario
-from app.utils.security import verificar_password, crear_token, crear_pre_token, verificar_token
+from app.utils.security import (
+    verificar_password, crear_token, crear_pre_token, verificar_token
+)
 from app.utils.deps import get_usuario_actual
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
@@ -26,12 +28,12 @@ class LoginResponse(BaseModel):
     token_type: str = "bearer"
     usuario: Optional[str] = None
     rol: Optional[str] = None
-    pre_token: Optional[str] = None   # solo presente cuando requires_2fa=True
+    pre_token: Optional[str] = None
 
 
 class Setup2FAResponse(BaseModel):
-    qr_code: str   # data URL PNG en base64 — ponlo directo en <img src="...">
-    secret: str    # clave manual de respaldo si no pueden escanear el QR
+    qr_code: str
+    secret: str
 
 
 class Completar2FARequest(BaseModel):
@@ -48,7 +50,7 @@ class CodigoTOTPRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _generar_qr_base64(uri: str) -> str:
-    """Convierte una URI otpauth:// en una imagen PNG codificada en base64."""
+    """Convierte una URI otpauth:// en PNG codificado en base64."""
     qr = qrcode.QRCode(box_size=10, border=4)
     qr.add_data(uri)
     qr.make(fit=True)
@@ -68,9 +70,8 @@ def login(
     db: Session = Depends(get_db)
 ):
     """Paso 1 del login.
-    - Si el usuario NO tiene 2FA: devuelve JWT completo directamente.
-    - Si el usuario SI tiene 2FA: devuelve pre_token (5 min) y requires_2fa=True.
-      El cliente debe llamar a /auth/2fa/completar-login con ese pre_token + codigo TOTP.
+    Sin 2FA: devuelve JWT completo.
+    Con 2FA: devuelve pre_token + requires_2fa=True para continuar en /2fa/completar-login.
     """
     usuario = db.query(Usuario).filter(Usuario.email == form_data.username).first()
 
@@ -95,10 +96,7 @@ def login(
 
 @router.post("/2fa/completar-login", response_model=LoginResponse)
 def completar_login_2fa(datos: Completar2FARequest, db: Session = Depends(get_db)):
-    """Paso 2 del login cuando 2FA esta habilitado.
-    Recibe el pre_token del paso 1 y el codigo TOTP de Google Authenticator.
-    Si ambos son validos, devuelve el JWT completo.
-    """
+    """Paso 2 del login con 2FA. Recibe pre_token + codigo TOTP, devuelve JWT completo."""
     payload = verificar_token(datos.pre_token)
     if payload is None or payload.get("tipo") != "pre_auth":
         raise HTTPException(
@@ -130,7 +128,7 @@ def completar_login_2fa(datos: Completar2FARequest, db: Session = Depends(get_db
 
 
 # ---------------------------------------------------------------------------
-# Gestion del 2FA del usuario autenticado
+# Gestion del 2FA
 # ---------------------------------------------------------------------------
 
 @router.post("/2fa/setup", response_model=Setup2FAResponse)
@@ -138,18 +136,14 @@ def setup_2fa(
     usuario: Usuario = Depends(get_usuario_actual),
     db: Session = Depends(get_db)
 ):
-    """Genera (o recupera) el secreto TOTP y devuelve el QR para escanear.
-    El 2FA NO queda activo hasta confirmar con /auth/2fa/activar.
-    """
+    """Genera el secreto TOTP y devuelve el QR. El 2FA no queda activo hasta /2fa/activar."""
     if not usuario.totp_secret:
         usuario.totp_secret = pyotp.random_base32()
         db.commit()
 
     totp = pyotp.TOTP(usuario.totp_secret)
     uri = totp.provisioning_uri(name=usuario.email, issuer_name="Hestia")
-    qr_base64 = _generar_qr_base64(uri)
-
-    return Setup2FAResponse(qr_code=qr_base64, secret=usuario.totp_secret)
+    return Setup2FAResponse(qr_code=_generar_qr_base64(uri), secret=usuario.totp_secret)
 
 
 @router.post("/2fa/activar")
@@ -158,9 +152,7 @@ def activar_2fa(
     usuario: Usuario = Depends(get_usuario_actual),
     db: Session = Depends(get_db)
 ):
-    """Confirma el escaneo del QR verificando un codigo TOTP valido y activa el 2FA.
-    Llama primero a /auth/2fa/setup para obtener el QR.
-    """
+    """Confirma el escaneo del QR con un codigo valido y activa el 2FA."""
     if usuario.totp_habilitado:
         raise HTTPException(status_code=400, detail="El 2FA ya esta habilitado")
     if not usuario.totp_secret:
@@ -173,12 +165,12 @@ def activar_2fa(
     if not totp.verify(datos.codigo):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Codigo incorrecto. Asegurate de haber escaneado el QR correctamente."
+            detail="Codigo incorrecto. Asegurate de haber escaneado el QR."
         )
 
     usuario.totp_habilitado = True
     db.commit()
-    return {"mensaje": "2FA activado correctamente. Guarda tu clave de respaldo en un lugar seguro."}
+    return {"mensaje": "2FA activado. Guarda tu clave de respaldo en un lugar seguro."}
 
 
 @router.post("/2fa/desactivar")

@@ -1,7 +1,7 @@
 """Agrega campos TOTP al modelo Usuario para soporte de 2FA.
 
 Revision ID: 0001
-Revises:
+Revises: aaf389229667
 Create Date: 2026-05-11
 
 Esta migracion es defensiva: verifica si las columnas ya existen antes
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 revision = '0001'
-down_revision = None
+down_revision = 'aaf389229667'  # encadenada despues de la migracion inicial
 branch_labels = None
 depends_on = None
 
