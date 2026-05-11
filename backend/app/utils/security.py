@@ -11,20 +11,37 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 480))
 
+
 def _prehash(password: str) -> bytes:
     return hashlib.sha256(password.encode()).hexdigest().encode("utf-8")
+
 
 def hashear_password(password: str) -> str:
     return bcrypt.hashpw(_prehash(password), bcrypt.gensalt()).decode("utf-8")
 
+
 def verificar_password(password: str, hash: str) -> bool:
     return bcrypt.checkpw(_prehash(password), hash.encode("utf-8"))
 
+
 def crear_token(data: dict) -> str:
+    """JWT de acceso completo con expiracion configurada en el .env."""
     payload = data.copy()
-    expiracion = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload.update({"exp": expiracion})
+    payload.update({"exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)})
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def crear_pre_token(data: dict) -> str:
+    """JWT de vida corta (5 min) para el segundo paso del login con 2FA.
+    Lleva tipo='pre_auth' para diferenciarlo de un token de acceso completo.
+    Los endpoints protegidos rechazan este tipo de token."""
+    payload = data.copy()
+    payload.update({
+        "exp": datetime.utcnow() + timedelta(minutes=5),
+        "tipo": "pre_auth"
+    })
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
 
 def verificar_token(token: str) -> dict | None:
     try:
