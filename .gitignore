@@ -19,3 +19,4 @@ Thumbs.db
 
 # Node modules no van al repositorio
 node_modules/
+.vite/
