@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from app.models.usuario import RolUsuario
 
 
@@ -18,3 +18,11 @@ class UsuarioResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class CambiarPassword(BaseModel):
+    """Schema para cambiar la contraseña del usuario autenticado.
+    Pydantic valida min_length=8 antes de que el endpoint siquiera se ejecute.
+    """
+    password_actual: str
+    password_nueva: str = Field(min_length=8, description="Mínimo 8 caracteres")

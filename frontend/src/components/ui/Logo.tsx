@@ -1,5 +1,9 @@
-// Componente Logo — usa /public/logo.svg con soporte de color via CSS filter.
-// prop `light=true` invierte el logo a blanco para fondos oscuros (sidebar, login).
+// Componente Logo — usa /public/logo.png (PNG con fondo blanco).
+// prop `light=true`: envuelve en contenedor blanco redondeado para fondos oscuros
+// (sidebar, login). De esta forma el fondo blanco del PNG se integra visualmente
+// en lugar de contrastar con el fondo oscuro.
+// No usamos CSS filter (brightness/invert) porque con PNG de fondo blanco
+// el filtro invierte TODO incluyendo el fondo, generando un recuadro negro.
 
 interface LogoProps {
   className?: string
@@ -7,13 +11,22 @@ interface LogoProps {
 }
 
 export function Logo({ className = 'w-8 h-8', light = false }: LogoProps) {
-  return (
+  const img = (
     <img
-      src="/logo.svg"
+      src="/logo.png"
       alt="Hestia"
       className={className}
-      style={light ? { filter: 'brightness(0) invert(1)' } : undefined}
       draggable={false}
     />
   )
+
+  if (light) {
+    return (
+      <div className="bg-white rounded-xl p-0.5 inline-flex items-center justify-center flex-shrink-0">
+        {img}
+      </div>
+    )
+  }
+
+  return img
 }

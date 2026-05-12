@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.usuario import Usuario
-from app.schemas.usuario import UsuarioCreate, UsuarioResponse
+from app.schemas.usuario import UsuarioCreate, UsuarioResponse, CambiarPassword
 from app.schemas.comun import PaginatedResponse
 from app.utils.deps import get_usuario_actual, require_admin
-from app.utils.security import hashear_password
+from app.utils.security import hashear_password, verificar_password
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
@@ -25,6 +25,23 @@ def listar_usuarios(
 @router.get("/me", response_model=UsuarioResponse)
 def perfil_propio(usuario: Usuario = Depends(get_usuario_actual)):
     return usuario
+
+
+@router.post("/me/cambiar-password")
+def cambiar_password(
+    datos: CambiarPassword,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
+    """Permite al usuario autenticado cambiar su propia contraseña.
+    Verifica la contraseña actual con bcrypt antes de aceptar la nueva.
+    La nueva contraseña pasa por el mismo prehash SHA-256 + bcrypt que el login.
+    """
+    if not verificar_password(datos.password_actual, usuario.password_hash):
+        raise HTTPException(status_code=400, detail="Contraseña actual incorrecta")
+    usuario.password_hash = hashear_password(datos.password_nueva)
+    db.commit()
+    return {"mensaje": "Contraseña actualizada correctamente"}
 
 
 @router.get("/{usuario_id}", response_model=UsuarioResponse)
