@@ -1,6 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+import pyotp
+
 from app.database import get_db
 from app.models.insumo import Insumo
 from app.models.usuario import Usuario
@@ -10,15 +12,15 @@ from app.utils.deps import get_usuario_actual, require_operador, require_admin
 
 router = APIRouter(prefix="/insumos", tags=["Insumos"])
 
+TOTP_VALID_WINDOW = 1
 
-# --- Schema especifico para alertas ---
-# Mas rico que InsumoResponse: incluye nombres de sala/categoria y el deficit.
+
 class InsumoAlerta(BaseModel):
     id: int
     nombre: str
     stock_actual: int
     stock_minimo: int
-    deficit: int        # cuantas unidades faltan para alcanzar el minimo
+    deficit: int
     sala: str | None
     categoria: str | None
 
@@ -26,24 +28,22 @@ class InsumoAlerta(BaseModel):
         from_attributes = True
 
 
-# ---------------------------------------------------------------------------
-# IMPORTANTE: /alertas debe ir ANTES de /{insumo_id}.
-# FastAPI evalua rutas en orden. Si /{insumo_id} va primero, intentara
-# parsear la palabra 'alertas' como un entero y devolvera error 422.
-# ---------------------------------------------------------------------------
+class EliminarInsumoRequest(BaseModel):
+    codigo_totp: str
+
+
+# IMPORTANTE: /alertas debe ir ANTES de /{insumo_id} para evitar conflicto de rutas.
 
 @router.get("/alertas", response_model=list[InsumoAlerta])
 def alertas_stock(
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual)  # cualquier rol puede ver alertas
+    usuario: Usuario = Depends(get_usuario_actual)
 ):
-    """Devuelve los insumos cuyo stock_actual es menor o igual al stock_minimo.
-    Incluye el deficit (cuanto falta para llegar al minimo) y datos de sala/categoria.
-    """
+    """Insumos cuyo stock_actual es menor o igual al stock_minimo."""
     insumos = (
         db.query(Insumo)
         .filter(Insumo.stock_actual <= Insumo.stock_minimo)
-        .order_by(Insumo.stock_actual.asc())  # primero los mas criticos
+        .order_by(Insumo.stock_actual.asc())
         .all()
     )
     return [
@@ -117,9 +117,24 @@ def actualizar_insumo(
 @router.delete("/{insumo_id}")
 def eliminar_insumo(
     insumo_id: int,
+    datos: EliminarInsumoRequest,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
+    """Elimina un insumo. Requiere rol admin + codigo TOTP valido.
+    Si el admin no tiene 2FA activo, debe activarlo antes de poder eliminar.
+    """
+    if not usuario.totp_habilitado or not usuario.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes tener el 2FA activado para eliminar insumos."
+        )
+    totp = pyotp.TOTP(usuario.totp_secret)
+    if not totp.verify(datos.codigo_totp, valid_window=TOTP_VALID_WINDOW):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Codigo 2FA incorrecto. El insumo no fue eliminado."
+        )
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")

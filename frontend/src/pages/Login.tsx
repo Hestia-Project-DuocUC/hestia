@@ -23,7 +23,6 @@ export function Login() {
   const is2FA = preToken !== null
 
   function formatRecoveryCode(input: string) {
-    // Permite solo hex mayusculas y auto-inserta el guion en la posicion 8
     const clean = input.toUpperCase().replace(/[^A-F0-9]/g, '').slice(0, 16)
     return clean.length <= 8 ? clean : `${clean.slice(0, 8)}-${clean.slice(8)}`
   }
@@ -79,7 +78,8 @@ export function Login() {
       })
       if (data.access_token) {
         setAuth(data.access_token, { nombre: data.usuario!, rol: data.rol! })
-        navigate('/dashboard')
+        // El 2FA fue desactivado automaticamente — redirigir a configuracion
+        navigate('/seguridad')
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
@@ -126,13 +126,16 @@ export function Login() {
                   <label className={labelCls}>Correo electronico</label>
                   <input type="email" value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className={inputCls} placeholder="usuario@hestia.cl" required />
+                    className={inputCls} placeholder="usuario@hestia.cl" required
+                  />
                 </div>
                 <div>
                   <label className={labelCls}>Contrasena</label>
-                  <input type="password" value={password}
+                  <input
+                    type="password" value={password}
                     onChange={e => setPassword(e.target.value)}
-                    className={inputCls} placeholder="\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" required />
+                    className={inputCls} placeholder="••••••••" required
+                  />
                 </div>
                 {error && (
                   <p className="text-rose-400 text-xs bg-rose-950 border border-rose-800
@@ -146,8 +149,8 @@ export function Login() {
           ) : modo2FA === 'totp' ? (
             <>
               <button onClick={volverAlLogin}
-                className="text-slate-400 hover:text-slate-200 text-sm font-semibold mb-4
-                           flex items-center gap-1">
+                className="text-slate-400 hover:text-slate-200 text-sm font-semibold
+                           mb-4 flex items-center gap-1">
                 ← Volver
               </button>
               <h2 className="text-base font-bold text-white mb-1">Verificacion 2FA</h2>
@@ -185,19 +188,21 @@ export function Login() {
             <>
               <button
                 onClick={() => { setModo2FA('totp'); setError(null) }}
-                className="text-slate-400 hover:text-slate-200 text-sm font-semibold mb-4
-                           flex items-center gap-1">
+                className="text-slate-400 hover:text-slate-200 text-sm font-semibold
+                           mb-4 flex items-center gap-1">
                 ← Volver
               </button>
               <h2 className="text-base font-bold text-white mb-1">Codigo de recuperacion</h2>
               <p className="text-slate-400 text-xs mb-5">
-                Ingresa uno de tus codigos de recuperacion de un solo uso.
+                Ingresa uno de tus codigos de un solo uso.
                 Formato: <code className="text-teal-400">XXXXXXXX-XXXXXXXX</code>
               </p>
               <form onSubmit={handleRecovery} className="space-y-4">
                 <input
                   type="text" value={recovery}
-                  onChange={e => { setRecovery(formatRecoveryCode(e.target.value)); setError(null) }}
+                  onChange={e => {
+                    setRecovery(formatRecoveryCode(e.target.value)); setError(null)
+                  }}
                   className="w-full px-4 py-4 rounded-lg border border-slate-700 bg-slate-900
                              text-white text-lg text-center font-mono tracking-widest
                              focus:outline-none focus:ring-2 focus:ring-teal-500

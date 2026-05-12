@@ -180,8 +180,8 @@ def recuperar_acceso_2fa(
     datos: RecuperoRequest, db: Session = Depends(get_db)
 ):
     """Paso 2 alternativo usando un codigo de recuperacion de un solo uso.
-    Util cuando el usuario perdio acceso a su app TOTP.
-    El codigo queda invalidado tras usarse.
+    Tras el acceso exitoso, desactiva el 2FA automaticamente para que el
+    usuario pueda configurarlo de nuevo con su nuevo dispositivo.
     """
     payload = verificar_token(datos.pre_token)
     if payload is None or payload.get("tipo") != "pre_auth":
@@ -204,6 +204,12 @@ def recuperar_acceso_2fa(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo de recuperacion invalido o ya utilizado"
         )
+    # Desactivar 2FA: el usuario perdio su dispositivo y debe configurarlo de nuevo
+    usuario.totp_habilitado = False
+    usuario.totp_secret = None
+    usuario.totp_recovery_codes = None
+    db.commit()
+
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
