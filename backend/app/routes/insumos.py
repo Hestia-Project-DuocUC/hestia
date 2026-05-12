@@ -1,7 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
+from typing import Optional
 import pyotp
+import csv
+import io
 
 from app.database import get_db
 from app.models.insumo import Insumo
@@ -32,7 +36,28 @@ class EliminarInsumoRequest(BaseModel):
     codigo_totp: str
 
 
-# IMPORTANTE: /alertas debe ir ANTES de /{insumo_id} para evitar conflicto de rutas.
+def _build_query(db: Session,
+                 nombre: Optional[str] = None,
+                 sala_id: Optional[int] = None,
+                 categoria_id: Optional[int] = None,
+                 bajo_stock: Optional[bool] = None):
+    """Construye la query base con filtros opcionales reutilizable."""
+    q = db.query(Insumo)
+    if nombre:
+        q = q.filter(Insumo.nombre.ilike(f"%{nombre}%"))
+    if sala_id is not None:
+        q = q.filter(Insumo.sala_id == sala_id)
+    if categoria_id is not None:
+        q = q.filter(Insumo.categoria_id == categoria_id)
+    if bajo_stock:
+        q = q.filter(Insumo.stock_actual <= Insumo.stock_minimo)
+    return q
+
+
+# ---------------------------------------------------------------------------
+# IMPORTANTE: rutas estaticas (/alertas, /exportar) deben ir ANTES de la
+# ruta dinamica /{insumo_id}, o FastAPI las interpreta como un entero.
+# ---------------------------------------------------------------------------
 
 @router.get("/alertas", response_model=list[InsumoAlerta])
 def alertas_stock(
@@ -60,15 +85,67 @@ def alertas_stock(
     ]
 
 
+@router.get("/exportar")
+def exportar_insumos(
+    nombre: Optional[str] = None,
+    sala_id: Optional[int] = None,
+    categoria_id: Optional[int] = None,
+    bajo_stock: Optional[bool] = None,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
+    """Exporta el inventario como CSV con los mismos filtros del listado.
+    El archivo se abre directamente en Excel gracias al BOM UTF-8.
+    """
+    insumos = _build_query(
+        db, nombre, sala_id, categoria_id, bajo_stock
+    ).order_by(Insumo.nombre).all()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "nombre", "descripcion", "stock_actual",
+        "stock_minimo", "sala", "categoria", "estado"
+    ])
+    for i in insumos:
+        if i.stock_actual == 0:
+            estado = "agotado"
+        elif i.stock_actual <= i.stock_minimo:
+            estado = "bajo_stock"
+        else:
+            estado = "ok"
+        writer.writerow([
+            i.nombre,
+            i.descripcion or "",
+            i.stock_actual,
+            i.stock_minimo,
+            i.sala.nombre if i.sala else "",
+            i.categoria.nombre if i.categoria else "",
+            estado
+        ])
+    output.seek(0)
+    return StreamingResponse(
+        io.BytesIO(output.getvalue().encode("utf-8-sig")),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=inventario_hestia.csv"}
+    )
+
+
 @router.get("/", response_model=PaginatedResponse[InsumoResponse])
 def listar_insumos(
     skip: int = 0,
     limit: int = 20,
+    nombre: Optional[str] = None,
+    sala_id: Optional[int] = None,
+    categoria_id: Optional[int] = None,
+    bajo_stock: Optional[bool] = None,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual)
 ):
-    total = db.query(Insumo).count()
-    insumos = db.query(Insumo).offset(skip).limit(limit).all()
+    """Lista insumos con filtros opcionales: nombre, sala, categoria, bajo_stock."""
+    q = _build_query(db, nombre, sala_id, categoria_id, bajo_stock)
+    total = q.count()
+    insumos = q.offset(skip).limit(limit).all()
     return {"total": total, "skip": skip, "limit": limit, "data": insumos}
 
 
@@ -121,9 +198,7 @@ def eliminar_insumo(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    """Elimina un insumo. Requiere rol admin + codigo TOTP valido.
-    Si el admin no tiene 2FA activo, debe activarlo antes de poder eliminar.
-    """
+    """Requiere rol admin + codigo TOTP valido."""
     if not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

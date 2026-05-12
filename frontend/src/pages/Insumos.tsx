@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Search, Package, ChevronLeft, ChevronRight,
-  Plus, Pencil, Trash2, CheckCircle, ShieldAlert
+  Plus, Pencil, Trash2, CheckCircle, ShieldAlert,
+  Download, X, SlidersHorizontal
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
@@ -14,28 +15,20 @@ import { TableRowSkeleton } from '../components/ui/Skeleton'
 import { Modal } from '../components/ui/Modal'
 
 const PAGE_SIZE = 15
-const TOTP_VALID_LEN = 6
 
 interface FormState {
-  nombre: string
-  descripcion: string
-  stock_actual: string
-  stock_minimo: string
-  sala_id: string
-  categoria_id: string
+  nombre: string; descripcion: string
+  stock_actual: string; stock_minimo: string
+  sala_id: string; categoria_id: string
 }
-
 const FORM_VACIO: FormState = {
   nombre: '', descripcion: '', stock_actual: '',
   stock_minimo: '', sala_id: '', categoria_id: ''
 }
-
 function insumoAForm(i: InsumoResponse): FormState {
   return {
-    nombre: i.nombre,
-    descripcion: i.descripcion ?? '',
-    stock_actual: String(i.stock_actual),
-    stock_minimo: String(i.stock_minimo),
+    nombre: i.nombre, descripcion: i.descripcion ?? '',
+    stock_actual: String(i.stock_actual), stock_minimo: String(i.stock_minimo),
     sala_id: i.sala_id != null ? String(i.sala_id) : '',
     categoria_id: i.categoria_id != null ? String(i.categoria_id) : ''
   }
@@ -46,15 +39,22 @@ export function Insumos() {
   const puedeEscribir = user?.rol === 'admin' || user?.rol === 'operador'
   const puedeEliminar = user?.rol === 'admin'
 
-  const [insumos, setInsumos]         = useState<InsumoResponse[]>([])
-  const [total, setTotal]             = useState(0)
-  const [page, setPage]               = useState(0)
-  const [search, setSearch]           = useState('')
-  const [query, setQuery]             = useState('')
-  const [loading, setLoading]         = useState(true)
-  const [salas, setSalas]             = useState<SalaResponse[]>([])
-  const [categorias, setCategorias]   = useState<CategoriaResponse[]>([])
-  const [userHas2FA, setUserHas2FA]   = useState<boolean | null>(null)
+  // Datos
+  const [insumos, setInsumos]       = useState<InsumoResponse[]>([])
+  const [total, setTotal]           = useState(0)
+  const [page, setPage]             = useState(0)
+  const [loading, setLoading]       = useState(true)
+  const [salas, setSalas]           = useState<SalaResponse[]>([])
+  const [categorias, setCategorias] = useState<CategoriaResponse[]>([])
+  const [userHas2FA, setUserHas2FA] = useState<boolean | null>(null)
+
+  // Filtros
+  const [searchInput, setSearchInput]     = useState('')      // lo que escribe el usuario
+  const [nombreFiltro, setNombreFiltro]   = useState('')      // commit al presionar Enter
+  const [salaFiltro, setSalaFiltro]       = useState('')
+  const [catFiltro, setCatFiltro]         = useState('')
+  const [bajoStock, setBajoStock]         = useState(false)
+  const hasFilters = nombreFiltro || salaFiltro || catFiltro || bajoStock
 
   // Modales
   const [editTarget, setEditTarget]     = useState<InsumoResponse | null>(null)
@@ -67,16 +67,17 @@ export function Insumos() {
   const [formError, setFormError]       = useState<string | null>(null)
   const [deleting, setDeleting]         = useState(false)
   const [toast, setToast]               = useState<string | null>(null)
+  const [exporting, setExporting]       = useState(false)
 
   function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
+    setToast(msg); setTimeout(() => setToast(null), 3000)
   }
 
+  // Carga salas, categorias y estado 2FA una sola vez
   useEffect(() => {
     Promise.all([
-      api.get<PaginatedResponse<SalaResponse>>('/salas/', { params: { limit: 100 } }),
-      api.get<PaginatedResponse<CategoriaResponse>>('/categorias/', { params: { limit: 100 } }),
+      api.get<PaginatedResponse<SalaResponse>>('/salas/', { params: { limit: 200 } }),
+      api.get<PaginatedResponse<CategoriaResponse>>('/categorias/', { params: { limit: 200 } }),
       api.get<{ totp_habilitado: boolean }>('/usuarios/me')
     ]).then(([s, c, me]) => {
       setSalas(s.data.data)
@@ -85,48 +86,72 @@ export function Insumos() {
     })
   }, [])
 
-  const load = useCallback(async (skip: number, q: string) => {
+  const load = useCallback(async (
+    skip: number,
+    nombre: string,
+    sala_id: string,
+    categoria_id: string,
+    bajo_stock: boolean
+  ) => {
     setLoading(true)
     try {
-      const { data } = await api.get<PaginatedResponse<InsumoResponse>>('/insumos/', {
-        params: { skip, limit: PAGE_SIZE }
-      })
-      const filtrados = q
-        ? data.data.filter(i => i.nombre.toLowerCase().includes(q.toLowerCase()))
-        : data.data
-      setInsumos(filtrados)
-      setTotal(q ? filtrados.length : data.total)
+      const params: Record<string, string | number | boolean> = {
+        skip, limit: PAGE_SIZE
+      }
+      if (nombre) params.nombre = nombre
+      if (sala_id) params.sala_id = parseInt(sala_id)
+      if (categoria_id) params.categoria_id = parseInt(categoria_id)
+      if (bajo_stock) params.bajo_stock = true
+      const { data } = await api.get<PaginatedResponse<InsumoResponse>>('/insumos/', { params })
+      setInsumos(data.data)
+      setTotal(data.total)
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load(page * PAGE_SIZE, query) }, [page, query, load])
+  useEffect(() => {
+    load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
+  }, [page, nombreFiltro, salaFiltro, catFiltro, bajoStock, load])
 
   function handleSearch(e: React.FormEvent) {
-    e.preventDefault(); setPage(0); setQuery(search)
+    e.preventDefault(); setNombreFiltro(searchInput); setPage(0)
   }
 
-  function abrirCrear() {
-    setForm(FORM_VACIO); setFormError(null); setShowCrear(true)
+  function limpiarFiltros() {
+    setSearchInput(''); setNombreFiltro('')
+    setSalaFiltro(''); setCatFiltro('')
+    setBajoStock(false); setPage(0)
   }
 
+  async function handleExportar() {
+    setExporting(true)
+    try {
+      const params: Record<string, string | number | boolean> = {}
+      if (nombreFiltro) params.nombre = nombreFiltro
+      if (salaFiltro) params.sala_id = parseInt(salaFiltro)
+      if (catFiltro) params.categoria_id = parseInt(catFiltro)
+      if (bajoStock) params.bajo_stock = true
+      const res = await api.get('/insumos/exportar', { params, responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'inventario_hestia.csv'; a.click()
+      URL.revokeObjectURL(url)
+      showToast('Exportacion descargada')
+    } finally { setExporting(false) }
+  }
+
+  // --- Modales ---
+  function abrirCrear() { setForm(FORM_VACIO); setFormError(null); setShowCrear(true) }
   function abrirEditar(i: InsumoResponse) {
     setForm(insumoAForm(i)); setFormError(null); setEditTarget(i)
   }
-
   function abrirEliminar(i: InsumoResponse) {
-    setDeleteTarget(i); setDeleteStep('confirm')
-    setDeleteTotp(''); setFormError(null)
+    setDeleteTarget(i); setDeleteStep('confirm'); setDeleteTotp(''); setFormError(null)
   }
-
   function cerrarModal() {
     setShowCrear(false); setEditTarget(null)
-    setDeleteTarget(null); setFormError(null)
-    setDeleteTotp('')
+    setDeleteTarget(null); setFormError(null); setDeleteTotp('')
   }
-
-  function setField(key: keyof FormState, val: string) {
-    setForm(f => ({ ...f, [key]: val }))
-  }
+  function setField(k: keyof FormState, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setFormError(null)
@@ -141,16 +166,17 @@ export function Insumos() {
     try {
       if (editTarget) {
         await api.put(`/insumos/${editTarget.id}`, payload)
-        showToast('Insumo actualizado correctamente')
+        showToast('Insumo actualizado')
       } else {
         await api.post('/insumos/', payload)
-        showToast('Insumo creado correctamente')
+        showToast('Insumo creado')
       }
-      cerrarModal(); load(page * PAGE_SIZE, query)
+      cerrarModal()
+      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
-      setFormError(msg ?? 'Error al guardar el insumo.')
+      setFormError(msg ?? 'Error al guardar.')
     } finally { setSaving(false) }
   }
 
@@ -158,12 +184,12 @@ export function Insumos() {
     if (!deleteTarget) return
     setDeleting(true)
     try {
-      // axios DELETE con body: pasar data en la config
       await api.delete(`/insumos/${deleteTarget.id}`, {
         data: { codigo_totp: deleteTotp }
       })
       showToast('Insumo eliminado')
-      cerrarModal(); load(page * PAGE_SIZE, query)
+      cerrarModal()
+      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
@@ -180,21 +206,19 @@ export function Insumos() {
     return <Badge variant="success">OK</Badge>
   }
 
-  const inputCls = `
-    w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm
-    focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent
-    bg-slate-50 focus:bg-white placeholder:text-slate-400 transition-all
-  `
+  const inputCls = `w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm
+    focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 focus:bg-white
+    placeholder:text-slate-400 transition-all`
   const labelCls = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5"
+  const selectCls = `${inputCls} cursor-pointer`
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2
-                        bg-teal-600 text-white px-4 py-3 rounded-xl shadow-lg
-                        text-sm font-semibold">
-          <CheckCircle size={16} /> {toast}
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-teal-600
+                        text-white px-4 py-3 rounded-xl shadow-lg text-sm font-semibold">
+          <CheckCircle size={16} />{toast}
         </div>
       )}
 
@@ -202,36 +226,98 @@ export function Insumos() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Insumos</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{total} insumos en inventario</p>
+          <p className="text-slate-500 text-sm mt-0.5">
+            {loading ? '...' : `${total} insumos`}
+            {hasFilters && ' (filtrado)'}
+          </p>
         </div>
-        {puedeEscribir && (
+        <div className="flex items-center gap-2">
           <button
-            onClick={abrirCrear}
-            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700
-                       text-white font-bold px-4 py-2.5 rounded-xl text-sm transition-colors"
+            onClick={handleExportar} disabled={exporting}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
+                       text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-colors
+                       disabled:opacity-50"
           >
-            <Plus size={16} /> Nuevo insumo
+            <Download size={14} />
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
           </button>
-        )}
+          {puedeEscribir && (
+            <button onClick={abrirCrear}
+              className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
+                         font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
+              <Plus size={16} /> Nuevo insumo
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Busqueda */}
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="relative">
-          <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text" value={search}
-            onChange={e => {
-              setSearch(e.target.value)
-              if (!e.target.value) { setQuery(''); setPage(0) }
-            }}
-            placeholder="Buscar insumo por nombre…"
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white
-                       text-slate-900 text-sm shadow-sm focus:outline-none focus:ring-2
-                       focus:ring-teal-500 focus:border-transparent placeholder:text-slate-400"
-          />
+      {/* Busqueda + Filtros */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-5">
+        {/* Barra de busqueda */}
+        <form onSubmit={handleSearch} className="flex gap-2 mb-3">
+          <div className="relative flex-1">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text" value={searchInput}
+              onChange={e => {
+                setSearchInput(e.target.value)
+                if (!e.target.value) { setNombreFiltro(''); setPage(0) }
+              }}
+              placeholder="Buscar por nombre..."
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-teal-500
+                         placeholder:text-slate-400"
+            />
+          </div>
+          <button type="submit"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white
+                       text-sm font-bold rounded-lg transition-colors">
+            Buscar
+          </button>
+        </form>
+
+        {/* Filtros en linea */}
+        <div className="flex flex-wrap items-center gap-3">
+          <SlidersHorizontal size={14} className="text-slate-400" />
+          <select
+            value={salaFiltro}
+            onChange={e => { setSalaFiltro(e.target.value); setPage(0) }}
+            className="flex-1 min-w-36 px-3 py-1.5 rounded-lg border border-slate-200
+                       text-sm text-slate-600 bg-white focus:outline-none
+                       focus:ring-2 focus:ring-teal-500 cursor-pointer"
+          >
+            <option value="">Todas las salas</option>
+            {salas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+          </select>
+          <select
+            value={catFiltro}
+            onChange={e => { setCatFiltro(e.target.value); setPage(0) }}
+            className="flex-1 min-w-36 px-3 py-1.5 rounded-lg border border-slate-200
+                       text-sm text-slate-600 bg-white focus:outline-none
+                       focus:ring-2 focus:ring-teal-500 cursor-pointer"
+          >
+            <option value="">Todas las categorias</option>
+            {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox" checked={bajoStock}
+              onChange={e => { setBajoStock(e.target.checked); setPage(0) }}
+              className="w-4 h-4 rounded accent-teal-600"
+            />
+            <span className="text-sm font-semibold text-slate-600">Solo bajo stock</span>
+          </label>
+          {hasFilters && (
+            <button
+              onClick={limpiarFiltros}
+              className="flex items-center gap-1 text-xs font-bold text-rose-500
+                         hover:text-rose-700 transition-colors ml-auto"
+            >
+              <X size={12} /> Limpiar filtros
+            </button>
+          )}
         </div>
-      </form>
+      </div>
 
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -255,14 +341,15 @@ export function Insumos() {
               ))
             ) : insumos.length === 0 ? (
               <tr>
-                <td colSpan={puedeEscribir ? 6 : 5} className="text-center py-16 text-slate-400">
+                <td colSpan={puedeEscribir ? 6 : 5}
+                  className="text-center py-16 text-slate-400">
                   <Package size={32} className="mx-auto mb-2 opacity-30" />
                   <p className="font-semibold">Sin insumos que mostrar</p>
-                  {query && (
-                    <button
-                      onClick={() => { setQuery(''); setSearch('') }}
-                      className="text-teal-600 text-xs mt-1 font-bold"
-                    >Limpiar busqueda</button>
+                  {hasFilters && (
+                    <button onClick={limpiarFiltros}
+                      className="text-teal-600 text-xs mt-1 font-bold">
+                      Limpiar filtros
+                    </button>
                   )}
                 </td>
               </tr>
@@ -279,19 +366,15 @@ export function Insumos() {
                   {puedeEscribir && (
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        <button
-                          onClick={() => abrirEditar(i)}
+                        <button onClick={() => abrirEditar(i)}
                           className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
-                                     hover:text-teal-600 transition-colors" title="Editar"
-                        >
+                                     hover:text-teal-600 transition-colors">
                           <Pencil size={14} />
                         </button>
                         {puedeEliminar && (
-                          <button
-                            onClick={() => abrirEliminar(i)}
+                          <button onClick={() => abrirEliminar(i)}
                             className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
-                                       hover:text-rose-600 transition-colors" title="Eliminar"
-                          >
+                                       hover:text-rose-600 transition-colors">
                             <Trash2 size={14} />
                           </button>
                         )}
@@ -304,7 +387,7 @@ export function Insumos() {
           </tbody>
         </table>
 
-        {!loading && !query && totalPages > 1 && (
+        {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
             <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
             <div className="flex items-center gap-1">
@@ -323,7 +406,7 @@ export function Insumos() {
         )}
       </div>
 
-      {/* Modal crear / editar */}
+      {/* Modal crear/editar */}
       {showModal && (
         <Modal title={editTarget ? 'Editar insumo' : 'Nuevo insumo'} onClose={cerrarModal} size="lg">
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -343,19 +426,22 @@ export function Insumos() {
               <div>
                 <label className={labelCls}>Stock actual *</label>
                 <input type="number" min="0" required value={form.stock_actual}
-                  onChange={e => setField('stock_actual', e.target.value)} className={inputCls} />
+                  onChange={e => setField('stock_actual', e.target.value)}
+                  className={inputCls} />
               </div>
               <div>
                 <label className={labelCls}>Stock minimo *</label>
                 <input type="number" min="0" required value={form.stock_minimo}
-                  onChange={e => setField('stock_minimo', e.target.value)} className={inputCls} />
+                  onChange={e => setField('stock_minimo', e.target.value)}
+                  className={inputCls} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className={labelCls}>Sala</label>
-                <select value={form.sala_id} onChange={e => setField('sala_id', e.target.value)}
-                  className={inputCls}>
+                <select value={form.sala_id}
+                  onChange={e => setField('sala_id', e.target.value)}
+                  className={selectCls}>
                   <option value="">Sin sala</option>
                   {salas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                 </select>
@@ -363,7 +449,8 @@ export function Insumos() {
               <div>
                 <label className={labelCls}>Categoria</label>
                 <select value={form.categoria_id}
-                  onChange={e => setField('categoria_id', e.target.value)} className={inputCls}>
+                  onChange={e => setField('categoria_id', e.target.value)}
+                  className={selectCls}>
                   <option value="">Sin categoria</option>
                   {categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
@@ -375,11 +462,11 @@ export function Insumos() {
             )}
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={cerrarModal}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600
-                           font-bold hover:bg-slate-50 transition-colors">Cancelar</button>
+                className="flex-1 py-2.5 rounded-xl border border-slate-200
+                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
               <button type="submit" disabled={saving}
-                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white
-                           font-bold transition-colors disabled:opacity-50">
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700
+                           text-white font-bold disabled:opacity-50">
                 {saving ? 'Guardando...' : editTarget ? 'Guardar cambios' : 'Crear insumo'}
               </button>
             </div>
@@ -387,7 +474,7 @@ export function Insumos() {
         </Modal>
       )}
 
-      {/* Modal eliminar — dos pasos: confirmar + TOTP */}
+      {/* Modal eliminar: dos pasos */}
       {deleteTarget && (
         <Modal title="Eliminar insumo" onClose={cerrarModal} size="sm">
           {deleteStep === 'confirm' ? (
@@ -397,19 +484,17 @@ export function Insumos() {
                 <Trash2 size={24} className="text-rose-600" />
               </div>
               <p className="font-bold text-slate-900 mb-1">¿Eliminar este insumo?</p>
-              <p className="text-slate-500 text-sm mb-2">
+              <p className="text-slate-500 text-sm mb-3">
                 <strong>{deleteTarget.nombre}</strong> sera eliminado permanentemente.
               </p>
-              {/* Aviso si no tiene 2FA */}
               {userHas2FA === false ? (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4 text-left">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
                   <div className="flex items-start gap-2">
                     <ShieldAlert size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="text-amber-800 font-bold text-xs">2FA requerido para eliminar</p>
+                      <p className="text-amber-800 font-bold text-xs">2FA requerido</p>
                       <p className="text-amber-700 text-xs mt-0.5">
-                        Necesitas activar la verificacion en dos pasos antes de
-                        poder eliminar insumos.
+                        Activa la verificacion en dos pasos para eliminar insumos.
                       </p>
                     </div>
                   </div>
@@ -428,14 +513,10 @@ export function Insumos() {
                   <div className="flex gap-3">
                     <button onClick={cerrarModal}
                       className="flex-1 py-2.5 rounded-xl border border-slate-200
-                                 text-slate-600 font-bold hover:bg-slate-50 transition-colors">
-                      Cancelar
-                    </button>
+                                 text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
                     <button onClick={() => setDeleteStep('totp')}
                       className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
-                                 text-white font-bold transition-colors">
-                      Continuar
-                    </button>
+                                 text-white font-bold">Continuar</button>
                   </div>
                 </>
               )}
@@ -447,9 +528,10 @@ export function Insumos() {
                 <strong> {deleteTarget.nombre}</strong>.
               </p>
               <input
-                type="text" inputMode="numeric" maxLength={TOTP_VALID_LEN}
-                value={deleteTotp}
-                onChange={e => { setDeleteTotp(e.target.value.replace(/\D/g, '')); setFormError(null) }}
+                type="text" inputMode="numeric" maxLength={6} value={deleteTotp}
+                onChange={e => {
+                  setDeleteTotp(e.target.value.replace(/\D/g, '')); setFormError(null)
+                }}
                 className="w-full px-4 py-4 rounded-xl border-2 border-slate-200
                            text-slate-900 text-4xl text-center font-black tracking-[0.7em]
                            focus:outline-none focus:border-rose-400 bg-slate-50 mb-4
@@ -463,14 +545,11 @@ export function Insumos() {
               <div className="flex gap-3">
                 <button onClick={() => setDeleteStep('confirm')}
                   className="flex-1 py-2.5 rounded-xl border border-slate-200
-                             text-slate-600 font-bold hover:bg-slate-50 transition-colors">
-                  ← Volver
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  disabled={deleting || deleteTotp.length !== TOTP_VALID_LEN}
+                             text-slate-600 font-bold hover:bg-slate-50">← Volver</button>
+                <button onClick={confirmDelete}
+                  disabled={deleting || deleteTotp.length !== 6}
                   className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
-                             text-white font-bold transition-colors disabled:opacity-50">
+                             text-white font-bold disabled:opacity-50">
                   {deleting ? 'Eliminando...' : 'Eliminar'}
                 </button>
               </div>
