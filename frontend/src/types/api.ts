@@ -26,7 +26,7 @@ export interface Setup2FAResponse {
 
 export interface ActivarResponse {
   mensaje: string
-  recovery_codes: string[]   // 10 codigos — mostrar UNA sola vez
+  recovery_codes: string[]
 }
 
 export interface ResumenResponse {
@@ -66,9 +66,39 @@ export interface SalaResponse {
   descripcion: string | null
 }
 
+export interface SalaCreate {
+  nombre: string
+  tipo?: string | null
+  descripcion?: string | null
+}
+
 export interface CategoriaResponse {
   id: number
   nombre: string
+}
+
+export interface CategoriaCreate {
+  nombre: string
+}
+
+export type TipoMovimiento = 'entrada' | 'salida'
+
+export interface MovimientoCreate {
+  tipo: TipoMovimiento
+  cantidad: number
+  insumo_id: number
+  motivo?: string | null
+}
+
+export interface MovimientoEnriquecido {
+  id: number
+  tipo: TipoMovimiento
+  cantidad: number
+  motivo: string | null
+  fecha: string
+  insumo: string
+  sala: string | null
+  usuario: string
 }
 
 export interface PaginatedResponse<T> {
