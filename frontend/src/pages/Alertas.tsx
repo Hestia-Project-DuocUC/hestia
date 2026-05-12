@@ -1,46 +1,67 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, RefreshCw } from 'lucide-react'
 import { api } from '../api/client'
 import type { InsumoAlerta } from '../types/api'
 import { Badge } from '../components/ui/Badge'
 import { AlertaCardSkeleton } from '../components/ui/Skeleton'
 
+type Tab = 'activas' | 'resueltas'
+const DIAS_OPTIONS = [7, 14, 30] as const
+
 export function Alertas() {
-  const [alertas, setAlertas] = useState<InsumoAlerta[]>([])
-  const [loading, setLoading] = useState(true)
+  const [tab, setTab]           = useState<Tab>('activas')
+  const [dias, setDias]         = useState<number>(30)
+  const [refetchKey, setRefetchKey] = useState(0)
+  const [activas, setActivas]   = useState<InsumoAlerta[]>([])
+  const [resueltas, setResueltas] = useState<InsumoAlerta[]>([])
+  const [loading, setLoading]   = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
-  async function load(showRefresh = false) {
-    if (showRefresh) setRefreshing(true)
-    else setLoading(true)
-    try {
-      const { data } = await api.get<InsumoAlerta[]>('/insumos/alertas')
-      setAlertas(data)
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
+  // Re-ejecuta cuando cambia tab, dias o se presiona "Actualizar"
+  useEffect(() => {
+    setLoading(true)
+    const url = tab === 'activas'
+      ? '/insumos/alertas'
+      : `/insumos/alertas-resueltas?dias=${dias}`
+
+    api.get<InsumoAlerta[]>(url)
+      .then(({ data }) => {
+        if (tab === 'activas') setActivas(data)
+        else setResueltas(data)
+      })
+      .finally(() => {
+        setLoading(false)
+        setRefreshing(false)
+      })
+  }, [tab, dias, refetchKey])
+
+  function refresh() {
+    setRefreshing(true)
+    setRefetchKey(k => k + 1)
   }
 
-  useEffect(() => { load() }, [])
-
-  // Clasifica la gravedad por el deficit
   function gravedad(a: InsumoAlerta): 'danger' | 'warning' {
     return a.stock_actual === 0 || a.deficit >= a.stock_minimo ? 'danger' : 'warning'
   }
 
+  const items = tab === 'activas' ? activas : resueltas
+
   return (
     <div className="p-8 max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-8">
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Alertas de stock</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            Insumos con stock igual o por debajo del mínimo establecido.
+            {tab === 'activas'
+              ? 'Insumos con stock igual o por debajo del mínimo establecido.'
+              : 'Insumos que superaron el mínimo y recibieron entradas recientemente.'}
           </p>
         </div>
         <button
-          onClick={() => load(true)}
-          disabled={refreshing}
+          onClick={refresh}
+          disabled={refreshing || loading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200
                      text-slate-600 hover:bg-slate-100 text-sm font-semibold transition-colors"
         >
@@ -49,17 +70,56 @@ export function Alertas() {
         </button>
       </div>
 
+      {/* Tabs Activas / Resueltas */}
+      <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl mb-5 w-fit">
+        {(['activas', 'resueltas'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-5 py-1.5 rounded-lg text-sm font-semibold transition-colors capitalize
+              ${ tab === t
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+              }`}
+          >
+            {t === 'activas' ? 'Activas' : 'Resueltas'}
+          </button>
+        ))}
+      </div>
+
+      {/* Selector de días (solo tab resueltas) */}
+      {tab === 'resueltas' && (
+        <div className="flex items-center gap-2 mb-5">
+          <span className="text-sm text-slate-500">Entradas en los últimos:</span>
+          {DIAS_OPTIONS.map((d) => (
+            <button
+              key={d}
+              onClick={() => setDias(d)}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors
+                ${ dias === d
+                  ? 'bg-teal-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+            >
+              {d} días
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Contador */}
       {!loading && (
         <div className="flex items-center gap-2 mb-5">
           <span className="text-sm text-slate-500">
-            {alertas.length === 0
-              ? 'Sin alertas activas'
-              : `${alertas.length} insumo${alertas.length !== 1 ? 's' : ''} en alerta`
+            {items.length === 0
+              ? (tab === 'activas' ? 'Sin alertas activas' : 'Sin alertas resueltas en este período')
+              : `${items.length} insumo${items.length !== 1 ? 's' : ''} ${tab === 'activas' ? 'en alerta' : 'resuelto' + (items.length !== 1 ? 's' : '')}`
             }
           </span>
-          {alertas.length > 0 && (
-            <Badge variant="danger">{alertas.filter(a => a.stock_actual === 0).length} agotados</Badge>
+          {tab === 'activas' && activas.length > 0 && (
+            <Badge variant="danger">
+              {activas.filter(a => a.stock_actual === 0).length} agotados
+            </Badge>
           )}
         </div>
       )}
@@ -69,40 +129,68 @@ export function Alertas() {
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => <AlertaCardSkeleton key={i} />)}
         </div>
-      ) : alertas.length === 0 ? (
-        <div className="bg-teal-50 border border-teal-200 rounded-2xl p-12 text-center">
-          <div className="w-14 h-14 bg-teal-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle size={24} className="text-teal-600" />
+      ) : items.length === 0 ? (
+        <div className={`border rounded-2xl p-12 text-center ${
+          tab === 'activas'
+            ? 'bg-teal-50 border-teal-200'
+            : 'bg-slate-50 border-slate-200'
+        }`}>
+          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 ${
+            tab === 'activas' ? 'bg-teal-100' : 'bg-slate-100'
+          }`}>
+            {tab === 'activas'
+              ? <AlertTriangle size={24} className="text-teal-600" />
+              : <CheckCircle2 size={24} className="text-slate-400" />
+            }
           </div>
-          <p className="text-teal-800 font-bold">Todo el inventario está en orden</p>
-          <p className="text-teal-600 text-sm mt-1">
-            Ningún insumo está bajo el stock mínimo definido.
+          <p className={`font-bold ${
+            tab === 'activas' ? 'text-teal-800' : 'text-slate-700'
+          }`}>
+            {tab === 'activas'
+              ? 'Todo el inventario está en orden'
+              : `Sin alertas resueltas en los últimos ${dias} días`}
+          </p>
+          <p className={`text-sm mt-1 ${
+            tab === 'activas' ? 'text-teal-600' : 'text-slate-500'
+          }`}>
+            {tab === 'activas'
+              ? 'Ningún insumo está bajo el stock mínimo definido.'
+              : 'No hubo insumos que superaran el mínimo en este período.'}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {alertas.map((a) => (
+          {items.map((a) => (
             <div
               key={a.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm
-                         hover:shadow-md hover:border-slate-300 transition-all"
+              className={`bg-white rounded-xl border p-5 shadow-sm
+                          hover:shadow-md transition-all ${
+                tab === 'resueltas'
+                  ? 'border-teal-200 hover:border-teal-300'
+                  : 'border-slate-200 hover:border-slate-300'
+              }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    tab === 'resueltas' ? 'bg-teal-50' :
                     a.stock_actual === 0 ? 'bg-rose-100' : 'bg-amber-50'
                   }`}>
-                    <AlertTriangle
-                      size={18}
-                      className={a.stock_actual === 0 ? 'text-rose-600' : 'text-amber-500'}
-                    />
+                    {tab === 'resueltas'
+                      ? <CheckCircle2 size={18} className="text-teal-600" />
+                      : <AlertTriangle
+                          size={18}
+                          className={a.stock_actual === 0 ? 'text-rose-600' : 'text-amber-500'}
+                        />
+                    }
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-slate-900">{a.nombre}</p>
-                      {a.stock_actual === 0 && (
-                        <Badge variant="danger">Agotado</Badge>
-                      )}
+                      {tab === 'resueltas'
+                        ? <Badge variant="success">Resuelto</Badge>
+                        : a.stock_actual === 0 && <Badge variant="danger">Agotado</Badge>
+                      }
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {a.sala ?? 'Sin sala asignada'}
@@ -110,10 +198,16 @@ export function Alertas() {
                     </p>
                   </div>
                 </div>
-                <Badge variant={gravedad(a)}>Déficit: {a.deficit}</Badge>
+
+                {tab === 'activas'
+                  ? <Badge variant={gravedad(a)}>Déficit: {a.deficit}</Badge>
+                  : <span className="text-xs text-teal-600 font-bold whitespace-nowrap">
+                      Stock: {a.stock_actual} / mín {a.stock_minimo}
+                    </span>
+                }
               </div>
 
-              {/* Barra de progreso de stock */}
+              {/* Barra de progreso */}
               <div className="mt-4">
                 <div className="flex justify-between text-xs text-slate-500 mb-1.5">
                   <span>Stock actual: <span className="font-bold text-slate-700">{a.stock_actual}</span></span>
@@ -122,6 +216,7 @@ export function Alertas() {
                 <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
+                      tab === 'resueltas' ? 'bg-teal-500' :
                       a.stock_actual === 0 ? 'bg-rose-500' : 'bg-amber-400'
                     }`}
                     style={{

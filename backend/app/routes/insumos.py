@@ -3,12 +3,14 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime, timedelta, timezone
 import pyotp
 import csv
 import io
 
 from app.database import get_db
 from app.models.insumo import Insumo
+from app.models.movimiento import Movimiento, TipoMovimiento
 from app.models.usuario import Usuario
 from app.schemas.insumo import InsumoCreate, InsumoUpdate, InsumoResponse
 from app.schemas.comun import PaginatedResponse
@@ -55,8 +57,9 @@ def _build_query(db: Session,
 
 
 # ---------------------------------------------------------------------------
-# IMPORTANTE: rutas estaticas (/alertas, /exportar) deben ir ANTES de la
-# ruta dinamica /{insumo_id}, o FastAPI las interpreta como un entero.
+# IMPORTANTE: rutas estaticas (/alertas, /alertas-resueltas, /exportar)
+# deben ir ANTES de la ruta dinamica /{insumo_id}, o FastAPI las interpreta
+# como un entero y devuelve 422 Unprocessable Entity.
 # ---------------------------------------------------------------------------
 
 @router.get("/alertas", response_model=list[InsumoAlerta])
@@ -71,6 +74,62 @@ def alertas_stock(
         .order_by(Insumo.stock_actual.asc())
         .all()
     )
+    return [
+        InsumoAlerta(
+            id=i.id,
+            nombre=i.nombre,
+            stock_actual=i.stock_actual,
+            stock_minimo=i.stock_minimo,
+            deficit=i.stock_minimo - i.stock_actual,
+            sala=i.sala.nombre if i.sala else None,
+            categoria=i.categoria.nombre if i.categoria else None,
+        )
+        for i in insumos
+    ]
+
+
+@router.get("/alertas-resueltas", response_model=list[InsumoAlerta])
+def alertas_resueltas(
+    dias: int = 30,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual)
+):
+    """Insumos que YA superaron el stock minimo y ademas tuvieron al menos
+    una entrada en los ultimos `dias` dias.
+
+    Por que subquery y no JOIN:
+    Un JOIN con Movimiento duplicaria filas si un insumo tiene multiples
+    entradas en el periodo. La subquery devuelve insumo_ids unicos (DISTINCT),
+    y luego filtramos Insumo sobre esa lista: limpio y eficiente.
+
+    Por que timezone.utc:
+    Movimiento.fecha es DateTime(timezone=True) en PostgreSQL, lo que
+    almacena timestamps con offset. Comparar con datetime.utcnow() (naive)
+    puede causar errores en algunas versiones de SQLAlchemy/psycopg2.
+    datetime.now(timezone.utc) es timezone-aware y compatibe de forma segura.
+    """
+    desde = datetime.now(timezone.utc) - timedelta(days=dias)
+
+    subq = (
+        db.query(Movimiento.insumo_id)
+        .filter(
+            Movimiento.tipo == TipoMovimiento.entrada,
+            Movimiento.fecha >= desde,
+        )
+        .distinct()
+        .subquery()
+    )
+
+    insumos = (
+        db.query(Insumo)
+        .filter(
+            Insumo.stock_actual > Insumo.stock_minimo,
+            Insumo.id.in_(subq),
+        )
+        .order_by(Insumo.nombre)
+        .all()
+    )
+
     return [
         InsumoAlerta(
             id=i.id,

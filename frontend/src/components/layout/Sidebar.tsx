@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Package,
   ArrowLeftRight, DoorOpen, Tag,
-  LogOut, User, ShieldCheck, Upload
+  LogOut, User, ShieldCheck, Upload, UserCircle
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { Logo } from '../ui/Logo'
@@ -67,8 +67,12 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Pie: seguridad, usuario, logout */}
+      {/* Pie: perfil, seguridad, usuario, logout */}
       <div className="px-3 pb-5 border-t border-slate-800 pt-4 space-y-1">
+        <NavLink to="/perfil" className={navLinkCls}>
+          <UserCircle size={17} />
+          Mi perfil
+        </NavLink>
         <NavLink to="/seguridad" className={navLinkCls}>
           <ShieldCheck size={17} />
           Seguridad
