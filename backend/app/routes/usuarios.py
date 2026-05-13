@@ -148,7 +148,7 @@ def eliminar_usuario(
     totp = pyotp.TOTP(admin.totp_secret)
     if not totp.verify(codigo_totp, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Codigo 2FA incorrecto. El usuario no fue eliminado."
         )
     encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()

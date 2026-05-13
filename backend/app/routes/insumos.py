@@ -262,7 +262,7 @@ def eliminar_insumo(
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(codigo_totp, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Codigo 2FA incorrecto. El insumo no fue eliminado."
         )
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
