@@ -11,15 +11,16 @@
 
 services:
 
-  # ── Base de datos PostgreSQL ──────────────────────────────────────────────
+  # ── Base de datos PostgreSQL ────────────────────────────────────────────
   db:
     image: postgres:16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: hestia_pass
       POSTGRES_DB: hestia_db
-    ports:
-      - "5432:5432"
+    # Sin 'ports' aqui: la BD solo es alcanzable desde dentro de la red
+    # interna de Docker (nombre de servicio 'db', puerto 5432).
+    # Ningun dispositivo de la LAN puede conectarse directamente a PostgreSQL.
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,7 +29,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── API FastAPI ───────────────────────────────────────────────────────────
+  # ── API FastAPI ─────────────────────────────────────────────────────
   api:
     build:
       context: ./backend
@@ -43,7 +44,7 @@ services:
     volumes:
       - ./backend:/app
 
-  # ── Frontend Vite (React) ────────────────────────────────────────────────
+  # ── Frontend Vite (React) ───────────────────────────────────────────
   frontend:
     build:
       context: ./frontend
@@ -51,7 +52,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      # El proxy de Vite reenvía llamadas /api/* a este destino.
+      # El proxy de Vite reenvia llamadas /api/* a este destino.
       # Dentro de Docker usamos el nombre del servicio 'api', no localhost.
       - API_URL=http://api:8000
     depends_on:
@@ -62,6 +63,6 @@ services:
       # (compilada para el OS del host) sobreescriba los binarios del contenedor.
       - /app/node_modules
 
-# ── Volumes persistentes ───────────────────────────────────────────────────
+# ── Volumes persistentes ───────────────────────────────────────────────
 volumes:
   postgres_data:

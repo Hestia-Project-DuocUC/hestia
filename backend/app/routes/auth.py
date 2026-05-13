@@ -17,6 +17,7 @@ from app.utils.security import (
     verificar_password, crear_token, crear_pre_token, verificar_token
 )
 from app.utils.deps import get_usuario_actual
+from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 
@@ -118,20 +119,37 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    """Paso 1. Sin 2FA devuelve JWT; con 2FA devuelve pre_token."""
+    """Paso 1 del login.
+
+    Flujo de rate limiting:
+      1. verificar_limite() ANTES de consultar la BD: asi no se revela si el
+         email existe (mismo error para cuenta inexistente y bloqueada).
+      2. Si las credenciales son incorrectas -> registrar_fallo().
+      3. Si el login es exitoso -> limpiar() para resetear el contador.
+
+    Sin 2FA devuelve JWT completo; con 2FA devuelve pre_token de vida corta.
+    """
+    verificar_limite(form_data.username)
+
     usuario = db.query(Usuario).filter(
         Usuario.email == form_data.username
     ).first()
+
     if not usuario or not verificar_password(
         form_data.password, usuario.password_hash
     ):
+        registrar_fallo(form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contrasena incorrectos"
         )
+
+    limpiar(form_data.username)
+
     if usuario.totp_habilitado:
         pre_token = crear_pre_token({"sub": str(usuario.id)})
         return LoginResponse(requires_2fa=True, pre_token=pre_token)
+
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
@@ -145,27 +163,39 @@ def login(
 def completar_login_2fa(
     datos: Completar2FARequest, db: Session = Depends(get_db)
 ):
-    """Paso 2 con codigo TOTP. Devuelve JWT completo."""
+    """Paso 2 con codigo TOTP. Devuelve JWT completo.
+
+    El pre_token ya identifica al usuario, asi que aplicamos el rate limit
+    por email para cubrir ataques de fuerza bruta sobre el codigo TOTP.
+    """
     payload = verificar_token(datos.pre_token)
     if payload is None or payload.get("tipo") != "pre_auth":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="pre_token invalido o expirado"
         )
+
     usuario = db.query(Usuario).filter(
         Usuario.id == int(payload["sub"])
     ).first()
+
     if not usuario or not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o configuracion 2FA no valida"
         )
+
+    verificar_limite(usuario.email)
+
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
+        registrar_fallo(usuario.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo 2FA incorrecto"
         )
+
+    limpiar(usuario.email)
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
