@@ -1,8 +1,8 @@
-# 🏙️ Hestia
-**Sistema de gestión de insumos médicos — DuocUC**
+# Hestia
 
-Hestia es un sistema de stock diseñado para gestionar insumos e implementos 
-en las instalaciones de salud de la Escuela de Salud de DuocUC.
+**Sistema de gestión de insumos médicos — Escuela de Salud DuocUC**
+
+Hestia es una aplicación web para el control de stock de insumos e implementos en las salas clínicas de la Escuela de Salud de DuocUC, sede San Bernardo. Desarrollado por estudiantes de Informática Biomédica como proyecto de Ruta IE.
 
 ---
 
@@ -10,111 +10,129 @@ en las instalaciones de salud de la Escuela de Salud de DuocUC.
 
 | Capa | Tecnología |
 |---|---|
-| Backend | Python 3.11 + FastAPI |
+| Backend | Python 3.11 · FastAPI · SQLAlchemy · Pydantic v2 |
 | Base de datos | PostgreSQL 16 |
-| ORM | SQLAlchemy + Alembic |
-| Autenticación | JWT + bcrypt |
-| Contenedores | Docker + Docker Compose |
+| Frontend | React 19 · Vite · TypeScript · Tailwind CSS |
+| Autenticación | JWT · bcrypt · TOTP 2FA (Google Authenticator) |
+| Contenedores | Docker · Docker Compose |
+| CI | GitHub Actions (flake8) |
+
+---
+
+## Funcionalidades
+
+- **Inventario** — CRUD de insumos con filtros por nombre, sala, categoría y estado de stock
+- **Movimientos** — registro de entradas y salidas con trazabilidad por usuario
+- **Alertas de stock** — insumos bajo mínimo y alertas resueltas con rango configurable
+- **Dashboard** — métricas en tiempo real, gráfico semanal de actividad y estado del inventario
+- **Importación masiva** — carga de insumos desde CSV o XLSX con verificación TOTP
+- **Exportación CSV** — descarga del inventario con los filtros activos
+- **Gestión de usuarios** — CRUD desde la UI con roles admin / operador / visor
+- **2FA** — setup wizard con códigos QR, códigos de recuperación y reset desde admin
+- **Audit log** — historial de acciones con filtros por tipo y usuario
+- **Seguridad** — rate limiting en login, security headers HTTP, BD no expuesta a la LAN
 
 ---
 
 ## Requisitos previos
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recomendado)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - Git
+
+No se requiere instalar Python, Node.js ni PostgreSQL de forma manual.
 
 ---
 
-## 🚀 Inicio rápido con Docker (recomendado)
-
-Esta es la forma estándar de correr el proyecto. No requiere instalar Python ni PostgreSQL manualmente.
+## Inicio rápido
 
 ### 1. Clonar el repositorio
+
 ```bash
 git clone https://github.com/Hestia-Project-DuocUC/hestia.git
 cd hestia
 ```
 
 ### 2. Crear el archivo de variables de entorno
+
 ```bash
 cp backend/.env.example backend/.env
 ```
-> ⚠️ Este paso es obligatorio. Sin el `.env`, el contenedor no puede conectarse a la base de datos.
 
-El `.env` generado sirve directo para desarrollo local. No necesitas cambiar nada.
+El `.env` generado funciona directamente para desarrollo local. Sin este archivo el contenedor no puede conectarse a la base de datos.
 
 ### 3. Levantar el proyecto
+
 ```bash
 docker compose up --build
 ```
 
-Esto automáticamente:
-- Levanta PostgreSQL 16
-- Instala las dependencias de Python
-- Aplica las migraciones de base de datos
-- Crea el usuario administrador inicial
-- Levanta la API en `http://localhost:8000`
+Esto levanta los tres servicios en orden:
 
-### 4. Credenciales del admin inicial
-
-| Campo | Valor |
+| Servicio | URL local |
 |---|---|
-| Email | `adminrole@hestia.cl` |
-| Password | `admin123` |
+| Frontend (React) | http://localhost:3000 |
+| API (FastAPI) | http://localhost:8000 |
+| Docs interactivos | http://localhost:8000/docs |
 
-### Comandos útiles
+La base de datos se crea automáticamente al iniciar la API.
+
+### 4. Cargar datos de demo (opcional)
+
+Para una demo con 88 insumos médicos reales y ~560 movimientos distribuidos en 60 días:
 
 ```bash
-docker compose up          # levantar (sin reconstruir)
-docker compose up --build  # reconstruir imagen y levantar
-docker compose down        # apagar contenedores
-docker compose down -v     # apagar Y borrar la base de datos
+docker compose exec api python seed_demo.py
+```
+
+El script pide confirmación antes de borrar datos existentes y muestra las credenciales generadas al finalizar.
+
+**Credenciales de demo:**
+
+| Email | Contraseña | Rol |
+|---|---|---|
+| `admin@hestia.duoc.cl` | `Admin2024!` | Administrador |
+| `mgonzalez@hestia.duoc.cl` | `Oper2024!` | Operador |
+| `cfuentes@hestia.duoc.cl` | `Oper2024!` | Operador |
+| `amartinez@hestia.duoc.cl` | `Visor2024!` | Visor |
+| `lperez@hestia.duoc.cl` | `Visor2024!` | Visor |
+
+---
+
+## Comandos útiles
+
+```bash
+# Ciclo de vida
+docker compose up                  # levantar sin reconstruir
+docker compose up --build          # reconstruir imágenes y levantar
+docker compose down                # apagar (los datos persisten)
+docker compose down -v             # apagar y borrar la base de datos
+
+# Recargar un servicio tras cambios de configuración
+docker compose restart api         # tras cambios en variables de entorno
+docker compose restart frontend    # tras cambios en vite.config.ts
+
+# Logs en tiempo real
+docker compose logs -f api
+docker compose logs -f frontend
 ```
 
 ---
 
-## Instalación manual (sin Docker)
+## Despliegue en red LAN
 
-Solo si necesitas correr el backend fuera de Docker.
+Hestia está diseñado para correr en un servidor dentro de la red interna de DuocUC. Los clientes acceden únicamente desde su navegador; no instalan nada.
 
-### 1. Clonar y entrar al backend
-```bash
-git clone https://github.com/Hestia-Project-DuocUC/hestia.git
-cd hestia/backend
+1. Ejecutar `docker compose up --build` en el servidor designado.
+2. Verificar la IP del servidor en la red local (ej. `192.168.1.50`).
+3. Los usuarios acceden desde `http://192.168.1.50:3000`.
+
+Para que el frontend llame a la API correctamente desde otros equipos, crear `frontend/.env` con:
+
+```
+VITE_API_URL=http://192.168.1.50:8000
 ```
 
-### 2. Crear entorno virtual
-```bash
-python -m venv venv
-venv\Scripts\activate        # Windows
-source venv/bin/activate     # macOS / Linux
-```
-
-### 3. Instalar dependencias
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configurar variables de entorno
-Crea `backend/.env` con:
-```
-DATABASE_URL=postgresql://postgres:TU_PASSWORD@localhost:5432/hestia_db
-SECRET_KEY=genera_una_clave_con: python -c "import secrets; print(secrets.token_hex(32))"
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=480
-```
-> Nota: cambia el host de `db` a `localhost` si corres sin Docker.
-
-### 5. Aplicar migraciones y crear admin
-```bash
-alembic upgrade head
-python crear_admin.py
-```
-
-### 6. Arrancar el servidor
-```bash
-uvicorn app.main:app --reload
-```
+Y reconstruir el contenedor: `docker compose up --build frontend`.
 
 ---
 
@@ -124,29 +142,48 @@ uvicorn app.main:app --reload
 hestia/
 ├── backend/
 │   ├── app/
-│   │   ├── models/       → Modelos SQLAlchemy
-│   │   ├── schemas/      → Schemas Pydantic
-│   │   ├── routes/       → Endpoints de la API
-│   │   └── utils/        → Autenticación y dependencias
-│   ├── alembic/          → Migraciones de base de datos
-│   ├── crear_admin.py    → Script de creación de admin
-│   ├── requirements.txt  → Dependencias Python
-│   └── .env.example      → Plantilla de variables de entorno
-└── frontend/             → (en desarrollo)
+│   │   ├── models/        → SQLAlchemy (usuario, insumo, sala, categoria, movimiento, audit_log)
+│   │   ├── schemas/       → Pydantic v2
+│   │   ├── routes/        → FastAPI routers
+│   │   └── utils/         → security, deps (RBAC), rate_limit, auditoria
+│   ├── seed_demo.py       → cargador de datos de demo
+│   ├── requirements.txt
+│   └── .env.example
+├── frontend/
+│   ├── src/
+│   │   ├── pages/         → Dashboard, Insumos, Alertas, Movimientos, Usuarios, AuditLog …
+│   │   ├── components/    → Layout, Sidebar, ui/ (Badge, Card, Modal, Skeleton, Logo)
+│   │   ├── api/           → Axios client con interceptor JWT
+│   │   ├── store/         → Zustand (auth)
+│   │   └── types/         → interfaces TypeScript sincronizadas con el backend
+│   └── public/
+│       └── logo.png
+├── docker-compose.yml
+├── CLAUDE.md              → contexto técnico para asistentes IA
+└── .github/
+    ├── workflows/         → CI (validación flake8)
+    ├── CONTRIBUTING.md
+    └── PULL_REQUEST_TEMPLATE.md
 ```
 
 ---
 
 ## Flujo de trabajo del equipo
 
-- Nunca trabajar directamente en `main`
-- Cada funcionalidad va en su propia rama: `feat/nombre`, `fix/nombre`, `chore/nombre`
-- Abrir un Pull Request para mergear a `main`
+- No trabajar directamente en `main`
+- Una rama por funcionalidad: `feat/nombre`, `fix/nombre`, `chore/nombre`
+- Abrir Pull Request para mergear a `main`
+- El CI valida automáticamente con flake8 en cada push
 
-Ver [CONTRIBUTING.md](CONTRIBUTING.md) para más detalles.
+Ver [`.github/CONTRIBUTING.md`](.github/CONTRIBUTING.md) para más detalles.
 
 ---
 
-## Valores del proyecto
+## Equipo
+
+Desarrollado por estudiantes de Informática Biomédica — DuocUC San Bernardo  
+Proyecto Ruta IE · Escuela de Salud · 2024–2025
+
+---
 
 **H**ospitalidad · **E**ficacia · **S**ervicio · **T**ransparencia · **I**nsumos · **A**postolado
