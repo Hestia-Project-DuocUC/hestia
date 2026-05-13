@@ -2,22 +2,26 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Package,
   ArrowLeftRight, DoorOpen, Tag,
-  LogOut, User, ShieldCheck, Upload, UserCircle
+  LogOut, User, ShieldCheck, Upload,
+  UserCircle, Users, ScrollText
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { Logo } from '../ui/Logo'
 
 const NAV_ITEMS = [
   // Seccion principal
-  { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard',    roles: ['admin','operador','visor'] },
-  { to: '/alertas',     icon: AlertTriangle,   label: 'Alertas',      roles: ['admin','operador','visor'] },
-  { to: '/insumos',     icon: Package,         label: 'Insumos',      roles: ['admin','operador','visor'] },
-  { to: '/movimientos', icon: ArrowLeftRight,  label: 'Movimientos',  roles: ['admin','operador','visor'] },
+  { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard',   roles: ['admin', 'operador', 'visor'] },
+  { to: '/alertas',     icon: AlertTriangle,   label: 'Alertas',     roles: ['admin', 'operador', 'visor'] },
+  { to: '/insumos',     icon: Package,         label: 'Insumos',     roles: ['admin', 'operador', 'visor'] },
+  { to: '/movimientos', icon: ArrowLeftRight,  label: 'Movimientos', roles: ['admin', 'operador', 'visor'] },
   // Seccion gestion
-  { to: '/salas',       icon: DoorOpen,        label: 'Salas',        roles: ['admin','operador','visor'], divider: true },
-  { to: '/categorias',  icon: Tag,             label: 'Categorias',   roles: ['admin','operador','visor'] },
-  // Solo admin
-  { to: '/importar',    icon: Upload,          label: 'Importar',     roles: ['admin'], divider: true },
+  { to: '/salas',       icon: DoorOpen,        label: 'Salas',       roles: ['admin', 'operador', 'visor'], divider: true },
+  { to: '/categorias',  icon: Tag,             label: 'Categorias',  roles: ['admin', 'operador', 'visor'] },
+  // Seccion operaciones
+  { to: '/importar',    icon: Upload,          label: 'Importar',    roles: ['admin'], divider: true },
+  // Seccion administracion (solo admin)
+  { to: '/usuarios',    icon: Users,           label: 'Usuarios',    roles: ['admin'], divider: true },
+  { to: '/audit-log',   icon: ScrollText,      label: 'Audit Log',   roles: ['admin'] },
 ]
 
 export function Sidebar() {
@@ -29,7 +33,7 @@ export function Sidebar() {
   const navLinkCls = ({ isActive }: { isActive: boolean }) => `
     flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold
     transition-colors duration-150
-    ${ isActive
+    ${isActive
       ? 'bg-teal-600 text-white'
       : 'text-slate-400 hover:bg-slate-800 hover:text-white'
     }
@@ -56,9 +60,7 @@ export function Sidebar() {
       <nav className="flex-1 px-3 py-5 space-y-1">
         {itemsVisibles.map(({ to, icon: Icon, label, divider }) => (
           <div key={to}>
-            {divider && (
-              <div className="border-t border-slate-800 my-2" />
-            )}
+            {divider && <div className="border-t border-slate-800 my-2" />}
             <NavLink to={to} className={navLinkCls}>
               <Icon size={17} />
               {label}

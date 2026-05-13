@@ -101,6 +101,18 @@ export interface MovimientoEnriquecido {
   usuario: string
 }
 
+export interface AuditLogEntry {
+  id: number
+  fecha: string
+  accion: string
+  entidad: string | null
+  entidad_id: number | null
+  detalle: string | null
+  ip: string | null
+  usuario_id: number | null
+  usuario_nombre: string
+}
+
 export interface PaginatedResponse<T> {
   total: number
   skip: number
