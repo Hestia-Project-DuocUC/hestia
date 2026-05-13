@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 from app.models.usuario import RolUsuario
 
@@ -9,20 +10,32 @@ class UsuarioCreate(BaseModel):
     rol: RolUsuario = RolUsuario.visor
 
 
+class UsuarioUpdate(BaseModel):
+    """Actualiza un usuario existente.
+    password es opcional: si se omite o es None, se conserva el actual.
+    La validacion de longitud minima se hace en el route handler para
+    distinguir 'no enviado' de 'enviado vacio'.
+    """
+    nombre: str
+    email: EmailStr
+    rol: RolUsuario
+    password: Optional[str] = None
+
+
 class UsuarioResponse(BaseModel):
     id: int
     nombre: str
     email: str
     rol: RolUsuario
-    totp_habilitado: bool = False  # expone estado 2FA (nunca el secret)
+    totp_habilitado: bool = False
 
     class Config:
         from_attributes = True
 
 
 class CambiarPassword(BaseModel):
-    """Schema para cambiar la contraseña del usuario autenticado.
-    Pydantic valida min_length=8 antes de que el endpoint siquiera se ejecute.
+    """Schema para cambiar la contrasena del usuario autenticado.
+    Pydantic valida min_length=8 antes de que el endpoint se ejecute.
     """
     password_actual: str
-    password_nueva: str = Field(min_length=8, description="Mínimo 8 caracteres")
+    password_nueva: str = Field(min_length=8, description="Minimo 8 caracteres")

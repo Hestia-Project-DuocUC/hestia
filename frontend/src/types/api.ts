@@ -32,11 +32,18 @@ export interface ActivarResponse {
 export interface ResumenResponse {
   total_insumos: number
   insumos_bajo_stock: number
+  insumos_agotados: number
   movimientos_hoy: number
   entradas_hoy: number
   salidas_hoy: number
   total_salas: number
   total_usuarios: number
+}
+
+export interface DiaMovimiento {
+  fecha: string
+  entradas: number
+  salidas: number
 }
 
 export interface InsumoAlerta {
@@ -99,6 +106,18 @@ export interface MovimientoEnriquecido {
   insumo: string
   sala: string | null
   usuario: string
+}
+
+export interface AuditLogEntry {
+  id: number
+  fecha: string
+  accion: string
+  entidad: string | null
+  entidad_id: number | null
+  detalle: string | null
+  ip: string | null
+  usuario_id: number | null
+  usuario_nombre: string
 }
 
 export interface PaginatedResponse<T> {

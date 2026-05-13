@@ -9,6 +9,8 @@ import { Categorias }       from './pages/Categorias'
 import { Configuracion2FA } from './pages/Configuracion2FA'
 import { ImportarInsumos }  from './pages/ImportarInsumos'
 import { Perfil }           from './pages/Perfil'
+import { Usuarios }         from './pages/Usuarios'
+import { AuditLog }         from './pages/AuditLog'
 import { Layout }           from './components/layout/Layout'
 
 export function App() {
@@ -27,6 +29,8 @@ export function App() {
           <Route path="seguridad"   element={<Configuracion2FA />} />
           <Route path="importar"    element={<ImportarInsumos />} />
           <Route path="perfil"      element={<Perfil />} />
+          <Route path="usuarios"    element={<Usuarios />} />
+          <Route path="audit-log"   element={<AuditLog />} />
         </Route>
       </Routes>
     </BrowserRouter>

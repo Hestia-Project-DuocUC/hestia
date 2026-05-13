@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -17,6 +17,8 @@ from app.utils.security import (
     verificar_password, crear_token, crear_pre_token, verificar_token
 )
 from app.utils.deps import get_usuario_actual
+from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar
+from app.utils.auditoria import registrar, get_ip
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 
@@ -78,7 +80,7 @@ def _generar_qr_base64(uri: str) -> str:
 def _generar_recovery_codes() -> tuple[list[str], str]:
     """Genera NUM_RECOVERY_CODES codigos aleatorios.
     Devuelve (lista_plana, json_con_hashes).
-    Los codigos planos deben mostrarse al usuario UNA sola vez.
+    Los codigos planos se muestran al usuario UNA sola vez.
     """
     codigos: list[str] = []
     registros: list[dict] = []
@@ -95,7 +97,6 @@ def _generar_recovery_codes() -> tuple[list[str], str]:
 def _verificar_y_consumir_recovery_code(
     usuario: Usuario, codigo: str, db: Session
 ) -> bool:
-    """Verifica un codigo de recuperacion y lo marca como usado si es valido."""
     if not usuario.totp_recovery_codes:
         return False
     registros = json.loads(usuario.totp_recovery_codes)
@@ -115,29 +116,53 @@ def _verificar_y_consumir_recovery_code(
 
 @router.post("/login", response_model=LoginResponse)
 def login(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Paso 1. Sin 2FA devuelve JWT; con 2FA devuelve pre_token."""
+    """Paso 1 del login con rate limiting y audit log.
+
+    Flujo:
+    1. verificar_limite() antes de tocar la BD (no revela si el email existe).
+    2. Credenciales incorrectas -> registrar_fallo() + audit LOGIN_FALLIDO.
+    3. Exito -> limpiar() + audit LOGIN_EXITOSO.
+    Sin 2FA: devuelve JWT completo.
+    Con 2FA: devuelve pre_token de vida corta.
+    """
+    verificar_limite(form_data.username)
+
     usuario = db.query(Usuario).filter(
         Usuario.email == form_data.username
     ).first()
+
     if not usuario or not verificar_password(
         form_data.password, usuario.password_hash
     ):
+        registrar_fallo(form_data.username)
+        registrar(
+            db, "LOGIN_FALLIDO",
+            usuario=usuario,
+            detalle=form_data.username,
+            ip=get_ip(request),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email o contrasena incorrectos"
+            detail="Email o contrasena incorrectos",
         )
+
+    limpiar(form_data.username)
+    registrar(db, "LOGIN_EXITOSO", usuario=usuario, ip=get_ip(request))
+
     if usuario.totp_habilitado:
         pre_token = crear_pre_token({"sub": str(usuario.id)})
         return LoginResponse(requires_2fa=True, pre_token=pre_token)
+
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
         access_token=token,
         usuario=usuario.nombre,
-        rol=usuario.rol.value
+        rol=usuario.rol.value,
     )
 
 
@@ -150,7 +175,7 @@ def completar_login_2fa(
     if payload is None or payload.get("tipo") != "pre_auth":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="pre_token invalido o expirado"
+            detail="pre_token invalido o expirado",
         )
     usuario = db.query(Usuario).filter(
         Usuario.id == int(payload["sub"])
@@ -158,20 +183,23 @@ def completar_login_2fa(
     if not usuario or not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o configuracion 2FA no valida"
+            detail="Usuario o configuracion 2FA no valida",
         )
+    verificar_limite(usuario.email)
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
+        registrar_fallo(usuario.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Codigo 2FA incorrecto"
+            detail="Codigo 2FA incorrecto",
         )
+    limpiar(usuario.email)
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
         access_token=token,
         usuario=usuario.nombre,
-        rol=usuario.rol.value
+        rol=usuario.rol.value,
     )
 
 
@@ -179,15 +207,12 @@ def completar_login_2fa(
 def recuperar_acceso_2fa(
     datos: RecuperoRequest, db: Session = Depends(get_db)
 ):
-    """Paso 2 alternativo usando un codigo de recuperacion de un solo uso.
-    Tras el acceso exitoso, desactiva el 2FA automaticamente para que el
-    usuario pueda configurarlo de nuevo con su nuevo dispositivo.
-    """
+    """Paso 2 alternativo usando un codigo de recuperacion de un solo uso."""
     payload = verificar_token(datos.pre_token)
     if payload is None or payload.get("tipo") != "pre_auth":
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="pre_token invalido o expirado"
+            detail="pre_token invalido o expirado",
         )
     usuario = db.query(Usuario).filter(
         Usuario.id == int(payload["sub"])
@@ -195,27 +220,23 @@ def recuperar_acceso_2fa(
     if not usuario or not usuario.totp_habilitado:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Usuario o configuracion 2FA no valida"
+            detail="Usuario o configuracion 2FA no valida",
         )
-    if not _verificar_y_consumir_recovery_code(
-        usuario, datos.recovery_code, db
-    ):
+    if not _verificar_y_consumir_recovery_code(usuario, datos.recovery_code, db):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Codigo de recuperacion invalido o ya utilizado"
+            detail="Codigo de recuperacion invalido o ya utilizado",
         )
-    # Desactivar 2FA: el usuario perdio su dispositivo y debe configurarlo de nuevo
     usuario.totp_habilitado = False
     usuario.totp_secret = None
     usuario.totp_recovery_codes = None
     db.commit()
-
     token = crear_token({"sub": str(usuario.id), "rol": usuario.rol.value})
     return LoginResponse(
         requires_2fa=False,
         access_token=token,
         usuario=usuario.nombre,
-        rol=usuario.rol.value
+        rol=usuario.rol.value,
     )
 
 
@@ -226,19 +247,16 @@ def recuperar_acceso_2fa(
 @router.post("/2fa/setup", response_model=Setup2FAResponse)
 def setup_2fa(
     usuario: Usuario = Depends(get_usuario_actual),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Genera el secreto TOTP y devuelve el QR. Activa con /2fa/activar."""
     if not usuario.totp_secret:
         usuario.totp_secret = pyotp.random_base32()
         db.commit()
     totp = pyotp.TOTP(usuario.totp_secret)
-    uri = totp.provisioning_uri(
-        name=usuario.email, issuer_name="Hestia"
-    )
+    uri = totp.provisioning_uri(name=usuario.email, issuer_name="Hestia")
     return Setup2FAResponse(
         qr_code=_generar_qr_base64(uri),
-        secret=usuario.totp_secret
+        secret=usuario.totp_secret,
     )
 
 
@@ -246,23 +264,18 @@ def setup_2fa(
 def activar_2fa(
     datos: CodigoTOTPRequest,
     usuario: Usuario = Depends(get_usuario_actual),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Confirma el QR y activa 2FA. Devuelve 10 codigos de recuperacion.
-    GUARDA ESTOS CODIGOS: se muestran una sola vez y no se pueden recuperar.
-    """
+    """Confirma el QR y activa 2FA. Devuelve 10 codigos de recuperacion."""
     if usuario.totp_habilitado:
         raise HTTPException(status_code=400, detail="El 2FA ya esta habilitado")
     if not usuario.totp_secret:
-        raise HTTPException(
-            status_code=400,
-            detail="Primero llama a /auth/2fa/setup"
-        )
+        raise HTTPException(status_code=400, detail="Primero llama a /auth/2fa/setup")
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Codigo incorrecto. Asegurate de haber escaneado el QR."
+            detail="Codigo incorrecto. Asegurate de haber escaneado el QR.",
         )
     codigos_planos, json_hashes = _generar_recovery_codes()
     usuario.totp_habilitado = True
@@ -270,7 +283,7 @@ def activar_2fa(
     db.commit()
     return ActivarResponse(
         mensaje="2FA activado correctamente.",
-        recovery_codes=codigos_planos
+        recovery_codes=codigos_planos,
     )
 
 
@@ -278,16 +291,15 @@ def activar_2fa(
 def desactivar_2fa(
     datos: CodigoTOTPRequest,
     usuario: Usuario = Depends(get_usuario_actual),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-    """Desactiva el 2FA. Requiere codigo TOTP valido."""
     if not usuario.totp_habilitado:
         raise HTTPException(status_code=400, detail="El 2FA no esta habilitado")
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Codigo incorrecto"
+            detail="Codigo incorrecto",
         )
     usuario.totp_habilitado = False
     usuario.totp_secret = None

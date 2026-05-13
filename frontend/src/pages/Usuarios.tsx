@@ -1,0 +1,383 @@
+import { useEffect, useState, useCallback } from 'react'
+import { Users, Plus, Pencil, Trash2, CheckCircle, ShieldOff, Shield } from 'lucide-react'
+import { api } from '../api/client'
+import type { UsuarioMe, PaginatedResponse } from '../types/api'
+import { Modal } from '../components/ui/Modal'
+import { Badge } from '../components/ui/Badge'
+
+const PAGE_SIZE = 20
+const ROLES = ['admin', 'operador', 'visor'] as const
+type Rol = typeof ROLES[number]
+
+const ROL_LABEL: Record<Rol, string> = {
+  admin: 'Administrador',
+  operador: 'Operador',
+  visor: 'Visor',
+}
+
+const ROL_VARIANT: Record<Rol, 'danger' | 'warning' | 'info'> = {
+  admin: 'danger',
+  operador: 'warning',
+  visor: 'info',
+}
+
+interface FormState {
+  nombre: string
+  email: string
+  password: string
+  rol: Rol
+}
+
+const FORM_INICIAL: FormState = { nombre: '', email: '', password: '', rol: 'visor' }
+
+export function Usuarios() {
+  const [usuarios, setUsuarios]     = useState<UsuarioMe[]>([])
+  const [total, setTotal]           = useState(0)
+  const [page, setPage]             = useState(0)
+  const [loading, setLoading]       = useState(true)
+  const [showCrear, setShowCrear]   = useState(false)
+  const [editTarget, setEditTarget] = useState<UsuarioMe | null>(null)
+  const [delTarget, setDelTarget]   = useState<UsuarioMe | null>(null)
+  const [form, setForm]             = useState<FormState>(FORM_INICIAL)
+  const [saving, setSaving]         = useState(false)
+  const [deleting, setDeleting]     = useState(false)
+  const [formError, setFormError]   = useState<string | null>(null)
+  const [toast, setToast]           = useState<string | null>(null)
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(null), 3000)
+  }
+
+  const load = useCallback(async (skip: number) => {
+    setLoading(true)
+    try {
+      const { data } = await api.get<PaginatedResponse<UsuarioMe>>('/usuarios/', {
+        params: { skip, limit: PAGE_SIZE },
+      })
+      setUsuarios(data.data)
+      setTotal(data.total)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load(page * PAGE_SIZE) }, [page, load])
+
+  function abrirCrear() {
+    setForm(FORM_INICIAL)
+    setFormError(null)
+    setShowCrear(true)
+  }
+
+  function abrirEditar(u: UsuarioMe) {
+    setForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol as Rol })
+    setFormError(null)
+    setEditTarget(u)
+  }
+
+  function cerrar() {
+    setShowCrear(false)
+    setEditTarget(null)
+    setDelTarget(null)
+    setFormError(null)
+  }
+
+  function handleField(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
+    setForm(f => ({ ...f, [e.target.name]: e.target.value }))
+    setFormError(null)
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setFormError(null)
+
+    if (!editTarget && form.password.length < 8) {
+      setFormError('La contrasena debe tener al menos 8 caracteres.')
+      return
+    }
+    if (editTarget && form.password && form.password.length < 8) {
+      setFormError('La contrasena nueva debe tener al menos 8 caracteres.')
+      return
+    }
+
+    setSaving(true)
+    try {
+      if (editTarget) {
+        const payload: Record<string, unknown> = {
+          nombre: form.nombre,
+          email: form.email,
+          rol: form.rol,
+        }
+        // Solo enviamos password si el usuario escribio algo
+        if (form.password) payload.password = form.password
+        await api.put(`/usuarios/${editTarget.id}`, payload)
+        showToast('Usuario actualizado')
+      } else {
+        await api.post('/usuarios/', {
+          nombre: form.nombre,
+          email: form.email,
+          password: form.password,
+          rol: form.rol,
+        })
+        showToast('Usuario creado')
+      }
+      cerrar()
+      load(page * PAGE_SIZE)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })
+        .response?.data?.detail
+      setFormError(msg ?? 'Error al guardar. Intenta de nuevo.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!delTarget) return
+    setDeleting(true)
+    try {
+      await api.delete(`/usuarios/${delTarget.id}`)
+      showToast('Usuario eliminado')
+      cerrar()
+      load(page * PAGE_SIZE)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })
+        .response?.data?.detail
+      setFormError(msg ?? 'Error al eliminar.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleReset2FA(u: UsuarioMe) {
+    if (!confirm(`¿Desactivar el 2FA de ${u.nombre}? Tendra que configurarlo de nuevo.`)) return
+    try {
+      await api.post(`/usuarios/${u.id}/reset-2fa`)
+      showToast(`2FA desactivado para ${u.nombre}`)
+      load(page * PAGE_SIZE)
+    } catch {
+      showToast('Error al desactivar el 2FA.')
+    }
+  }
+
+  const inputCls = `w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm
+    focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 focus:bg-white
+    placeholder:text-slate-400 transition-all`
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  return (
+    <div className="p-8 max-w-5xl mx-auto">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-teal-600
+                        text-white px-4 py-3 rounded-xl shadow-lg text-sm font-semibold">
+          <CheckCircle size={16} />{toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Usuarios</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{total} usuarios registrados</p>
+        </div>
+        <button onClick={abrirCrear}
+          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
+                     font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
+          <Plus size={16} /> Nuevo usuario
+        </button>
+      </div>
+
+      {/* Tabla */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 bg-slate-50">
+              {['Nombre', 'Email', 'Rol', '2FA', 'Acciones'].map(h => (
+                <th key={h}
+                  className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i}>
+                  {Array.from({ length: 5 }).map((__, j) => (
+                    <td key={j} className="px-4 py-3">
+                      <div className="skeleton h-4 rounded w-24" />
+                    </td>
+                  ))}
+                </tr>
+              ))
+            ) : usuarios.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-center py-16 text-slate-400">
+                  <Users size={32} className="mx-auto mb-2 opacity-30" />
+                  <p className="font-semibold">Sin usuarios registrados</p>
+                </td>
+              </tr>
+            ) : usuarios.map(u => (
+              <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-4 py-3 font-semibold text-slate-900">{u.nombre}</td>
+                <td className="px-4 py-3 text-slate-500">{u.email}</td>
+                <td className="px-4 py-3">
+                  <Badge variant={ROL_VARIANT[u.rol as Rol] ?? 'info'}>
+                    {ROL_LABEL[u.rol as Rol] ?? u.rol}
+                  </Badge>
+                </td>
+                <td className="px-4 py-3">
+                  {u.totp_habilitado
+                    ? <Badge variant="success"><Shield size={11} className="inline mr-1" />Activo</Badge>
+                    : <Badge variant="warning">Inactivo</Badge>
+                  }
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => abrirEditar(u)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
+                                 hover:text-teal-600 transition-colors" title="Editar">
+                      <Pencil size={14} />
+                    </button>
+                    {u.totp_habilitado && (
+                      <button onClick={() => handleReset2FA(u)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-50
+                                   hover:text-amber-600 transition-colors" title="Desactivar 2FA">
+                        <ShieldOff size={14} />
+                      </button>
+                    )}
+                    <button onClick={() => { setDelTarget(u); setFormError(null) }}
+                      className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
+                                 hover:text-rose-600 transition-colors" title="Eliminar">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {/* Paginacion */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
+            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <div className="flex gap-1">
+              <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
+                className="px-3 py-1 text-xs rounded-lg border border-slate-200
+                           disabled:opacity-40 hover:bg-slate-50">←</button>
+              <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1 text-xs rounded-lg border border-slate-200
+                           disabled:opacity-40 hover:bg-slate-50">→</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Modal crear / editar */}
+      {(showCrear || editTarget) && (
+        <Modal
+          title={editTarget ? 'Editar usuario' : 'Nuevo usuario'}
+          onClose={cerrar}
+          size="sm"
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                Nombre *
+              </label>
+              <input type="text" name="nombre" required value={form.nombre}
+                onChange={handleField} className={inputCls}
+                placeholder="Ej: Maria González" autoFocus />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                Email *
+              </label>
+              <input type="email" name="email" required value={form.email}
+                onChange={handleField} className={inputCls}
+                placeholder="usuario@duoc.cl" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                {editTarget ? 'Nueva contrasena' : 'Contrasena *'}
+              </label>
+              <input type="password" name="password"
+                required={!editTarget}
+                value={form.password}
+                onChange={handleField}
+                className={inputCls}
+                placeholder={editTarget ? 'Dejar vacio para no cambiar' : 'Minimo 8 caracteres'}
+                autoComplete="new-password" />
+              {editTarget && (
+                <p className="text-xs text-slate-400 mt-1">
+                  Si no escribes nada, la contrasena actual se conserva.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
+                Rol *
+              </label>
+              <select name="rol" value={form.rol} onChange={handleField}
+                className={inputCls}>
+                {ROLES.map(r => (
+                  <option key={r} value={r}>{ROL_LABEL[r]}</option>
+                ))}
+              </select>
+            </div>
+            {formError && (
+              <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200
+                            px-3 py-2 rounded-lg">{formError}</p>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={cerrar}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200
+                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+              <button type="submit" disabled={saving}
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700
+                           text-white font-bold disabled:opacity-50">
+                {saving ? 'Guardando...' : editTarget ? 'Guardar' : 'Crear'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {/* Modal eliminar */}
+      {delTarget && (
+        <Modal title="Eliminar usuario" onClose={cerrar} size="sm">
+          <div className="text-center">
+            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center
+                            justify-center mx-auto mb-4">
+              <Trash2 size={24} className="text-rose-600" />
+            </div>
+            <p className="font-bold text-slate-900 mb-1">¿Eliminar este usuario?</p>
+            <p className="text-slate-500 text-sm mb-6">
+              <strong>{delTarget.nombre}</strong> ({delTarget.email}) sera eliminado
+              permanentemente y no podra iniciar sesion.
+            </p>
+            {formError && (
+              <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
+                            px-3 py-2 rounded-lg mb-4">{formError}</p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={cerrar}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200
+                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
+                           text-white font-bold disabled:opacity-50">
+                {deleting ? 'Eliminando...' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
