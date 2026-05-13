@@ -21,6 +21,7 @@ export default defineConfig({
       '/categorias':  API,
       '/usuarios':    API,
       '/movimientos': API,
+      '/audit-log':   API,
     },
   },
 })

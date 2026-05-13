@@ -1,12 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
-import { ScrollText, Search, RefreshCw } from 'lucide-react'
+import { ScrollText, Search, RefreshCw, AlertCircle } from 'lucide-react'
 import { api } from '../api/client'
 import type { AuditLogEntry, PaginatedResponse } from '../types/api'
 import { Badge } from '../components/ui/Badge'
 
 const PAGE_SIZE = 50
 
-// Colorea la accion segun su tipo para leerla de un vistazo
 function BadgeAccion({ accion }: { accion: string }) {
   if (accion.includes('FALLIDO') || accion.includes('ELIMINAR')) {
     return <Badge variant="danger">{accion}</Badge>
@@ -36,15 +35,23 @@ export function AuditLog() {
   const [inputAccion, setInputAccion] = useState('')
   const [filtroAccion, setFiltroAccion] = useState('')
   const [refetchKey, setRefetchKey]   = useState(0)
+  const [apiError, setApiError]       = useState<string | null>(null)
 
   const load = useCallback(async (skip: number, accion: string) => {
     setLoading(true)
+    setApiError(null)
     try {
       const params: Record<string, unknown> = { skip, limit: PAGE_SIZE }
       if (accion) params.accion = accion
-      const { data } = await api.get<PaginatedResponse<AuditLogEntry>>('/audit-log/', { params })
+      const { data } = await api.get<PaginatedResponse<AuditLogEntry>>(
+        '/audit-log/', { params }
+      )
       setLogs(data.data)
       setTotal(data.total)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { detail?: string } } })
+        .response?.data?.detail
+      setApiError(msg ?? 'No se pudo conectar con el servidor. Revisa que la API este activa.')
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -70,7 +77,6 @@ export function AuditLog() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Audit Log</h1>
@@ -117,8 +123,17 @@ export function AuditLog() {
         )}
       </form>
 
+      {/* Error de API */}
+      {apiError && (
+        <div className="flex items-center gap-3 bg-rose-50 border border-rose-200
+                        rounded-xl px-4 py-3 mb-5 text-rose-700 text-sm">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          {apiError}
+        </div>
+      )}
+
       {/* Contador */}
-      {!loading && (
+      {!loading && !apiError && (
         <p className="text-sm text-slate-500 mb-4">
           {total} registro{total !== 1 ? 's' : ''}
           {filtroAccion ? ` para "${filtroAccion}"` : ''}
@@ -187,7 +202,6 @@ export function AuditLog() {
           </table>
         </div>
 
-        {/* Paginacion */}
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
             <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
