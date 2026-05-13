@@ -34,10 +34,6 @@ class InsumoAlerta(BaseModel):
         from_attributes = True
 
 
-class EliminarInsumoRequest(BaseModel):
-    codigo_totp: str
-
-
 def _build_query(db: Session,
                  nombre: Optional[str] = None,
                  sala_id: Optional[int] = None,
@@ -253,18 +249,18 @@ def actualizar_insumo(
 @router.delete("/{insumo_id}")
 def eliminar_insumo(
     insumo_id: int,
-    datos: EliminarInsumoRequest,
+    codigo_totp: str,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    """Requiere rol admin + codigo TOTP valido."""
+    """Requiere rol admin + codigo TOTP valido (query param)."""
     if not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Debes tener el 2FA activado para eliminar insumos."
         )
     totp = pyotp.TOTP(usuario.totp_secret)
-    if not totp.verify(datos.codigo_totp, valid_window=TOTP_VALID_WINDOW):
+    if not totp.verify(codigo_totp, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Codigo 2FA incorrecto. El insumo no fue eliminado."

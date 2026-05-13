@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+import pyotp
 
 from app.database import get_db
 from app.models.usuario import Usuario
@@ -12,6 +13,8 @@ from app.utils.security import hashear_password, verificar_password
 from app.utils.auditoria import registrar, get_ip
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
+
+TOTP_VALID_WINDOW = 1
 
 
 @router.get("/", response_model=PaginatedResponse[UsuarioResponse])
@@ -131,10 +134,23 @@ def actualizar_usuario(
 @router.delete("/{usuario_id}")
 def eliminar_usuario(
     usuario_id: int,
+    codigo_totp: str,
     request: Request,
     db: Session = Depends(get_db),
     admin: Usuario = Depends(require_admin),
 ):
+    """Requiere rol admin + codigo TOTP valido (query param)."""
+    if not admin.totp_habilitado or not admin.totp_secret:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Debes tener el 2FA activado para eliminar usuarios."
+        )
+    totp = pyotp.TOTP(admin.totp_secret)
+    if not totp.verify(codigo_totp, valid_window=TOTP_VALID_WINDOW):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Codigo 2FA incorrecto. El usuario no fue eliminado."
+        )
     encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not encontrado:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")

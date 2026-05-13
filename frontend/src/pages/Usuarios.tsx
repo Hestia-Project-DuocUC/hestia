@@ -1,5 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Users, Plus, Pencil, Trash2, CheckCircle, ShieldOff, Shield } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import {
+  Users, Plus, Pencil, Trash2, CheckCircle,
+  ShieldOff, Shield, ShieldAlert
+} from 'lucide-react'
 import { api } from '../api/client'
 import type { UsuarioMe, PaginatedResponse } from '../types/api'
 import { Modal } from '../components/ui/Modal'
@@ -43,11 +47,21 @@ export function Usuarios() {
   const [deleting, setDeleting]     = useState(false)
   const [formError, setFormError]   = useState<string | null>(null)
   const [toast, setToast]           = useState<string | null>(null)
+  const [deleteStep, setDeleteStep] = useState<'confirm' | 'totp'>('confirm')
+  const [deleteTotp, setDeleteTotp] = useState('')
+  const [userHas2FA, setUserHas2FA] = useState<boolean | null>(null)
 
   function showToast(msg: string) {
     setToast(msg)
     setTimeout(() => setToast(null), 3000)
   }
+
+  // Carga estado 2FA del admin actual una sola vez
+  useEffect(() => {
+    api.get<{ totp_habilitado: boolean }>('/usuarios/me').then(({ data }) => {
+      setUserHas2FA(data.totp_habilitado)
+    }).catch(() => {})
+  }, [])
 
   const load = useCallback(async (skip: number) => {
     setLoading(true)
@@ -81,6 +95,8 @@ export function Usuarios() {
     setEditTarget(null)
     setDelTarget(null)
     setFormError(null)
+    setDeleteStep('confirm')
+    setDeleteTotp('')
   }
 
   function handleField(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
@@ -137,7 +153,9 @@ export function Usuarios() {
     if (!delTarget) return
     setDeleting(true)
     try {
-      await api.delete(`/usuarios/${delTarget.id}`)
+      await api.delete(`/usuarios/${delTarget.id}`, {
+        params: { codigo_totp: deleteTotp }
+      })
       showToast('Usuario eliminado')
       cerrar()
       load(page * PAGE_SIZE)
@@ -348,34 +366,92 @@ export function Usuarios() {
         </Modal>
       )}
 
-      {/* Modal eliminar */}
+      {/* Modal eliminar — dos pasos con TOTP */}
       {delTarget && (
         <Modal title="Eliminar usuario" onClose={cerrar} size="sm">
-          <div className="text-center">
-            <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center
-                            justify-center mx-auto mb-4">
-              <Trash2 size={24} className="text-rose-600" />
+          {deleteStep === 'confirm' ? (
+            <div className="text-center">
+              <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center
+                              justify-center mx-auto mb-4">
+                <Trash2 size={24} className="text-rose-600" />
+              </div>
+              <p className="font-bold text-slate-900 mb-1">¿Eliminar este usuario?</p>
+              <p className="text-slate-500 text-sm mb-3">
+                <strong>{delTarget.nombre}</strong> ({delTarget.email}) sera eliminado
+                permanentemente y no podra iniciar sesion.
+              </p>
+              {userHas2FA === false ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
+                  <div className="flex items-start gap-2">
+                    <ShieldAlert size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-amber-800 font-bold text-xs">2FA requerido</p>
+                      <p className="text-amber-700 text-xs mt-0.5">
+                        Activa la verificacion en dos pasos para eliminar usuarios.
+                      </p>
+                    </div>
+                  </div>
+                  <Link to="/seguridad" onClick={cerrar}
+                    className="mt-3 flex items-center justify-center gap-1.5
+                               bg-amber-600 hover:bg-amber-700 text-white text-xs
+                               font-bold py-2 rounded-lg transition-colors">
+                    Activar 2FA ahora
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <p className="text-slate-400 text-xs mb-5">
+                    Necesitaras tu codigo TOTP para confirmar.
+                  </p>
+                  {formError && (
+                    <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
+                                  px-3 py-2 rounded-lg mb-4">{formError}</p>
+                  )}
+                  <div className="flex gap-3">
+                    <button onClick={cerrar}
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200
+                                 text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+                    <button onClick={() => setDeleteStep('totp')}
+                      className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
+                                 text-white font-bold">Continuar</button>
+                  </div>
+                </>
+              )}
             </div>
-            <p className="font-bold text-slate-900 mb-1">¿Eliminar este usuario?</p>
-            <p className="text-slate-500 text-sm mb-6">
-              <strong>{delTarget.nombre}</strong> ({delTarget.email}) sera eliminado
-              permanentemente y no podra iniciar sesion.
-            </p>
-            {formError && (
-              <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
-                            px-3 py-2 rounded-lg mb-4">{formError}</p>
-            )}
-            <div className="flex gap-3">
-              <button onClick={cerrar}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200
-                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
-              <button onClick={handleDelete} disabled={deleting}
-                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
-                           text-white font-bold disabled:opacity-50">
-                {deleting ? 'Eliminando...' : 'Eliminar'}
-              </button>
+          ) : (
+            <div>
+              <p className="text-slate-600 text-sm mb-5 text-center">
+                Ingresa tu codigo TOTP para confirmar la eliminacion de
+                <strong> {delTarget.nombre}</strong>.
+              </p>
+              <input
+                type="text" inputMode="numeric" maxLength={6} value={deleteTotp}
+                onChange={e => {
+                  setDeleteTotp(e.target.value.replace(/\D/g, '')); setFormError(null)
+                }}
+                className="w-full px-4 py-4 rounded-xl border-2 border-slate-200
+                           text-slate-900 text-4xl text-center font-black tracking-[0.7em]
+                           focus:outline-none focus:border-rose-400 bg-slate-50 mb-4
+                           placeholder:text-slate-200"
+                placeholder="000000" autoFocus
+              />
+              {formError && (
+                <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
+                              px-3 py-2 rounded-lg font-semibold mb-4">{formError}</p>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => { setDeleteStep('confirm'); setFormError(null) }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200
+                             text-slate-600 font-bold hover:bg-slate-50">← Volver</button>
+                <button onClick={handleDelete}
+                  disabled={deleting || deleteTotp.length !== 6}
+                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
+                             text-white font-bold disabled:opacity-50">
+                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </Modal>
       )}
     </div>

@@ -44,7 +44,7 @@ export function Sidebar() {
   )
 
   return (
-    <aside className="w-60 min-h-screen bg-slate-900 flex flex-col border-r border-slate-800 flex-shrink-0">
+    <aside className="w-60 h-full bg-slate-900 flex flex-col border-r border-slate-800 flex-shrink-0">
       {/* Logo */}
       <div className="px-5 pt-7 pb-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ export function Sidebar() {
       </div>
 
       {/* Navegacion */}
-      <nav className="flex-1 px-3 py-5 space-y-1">
+      <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
         {itemsVisibles.map(({ to, icon: Icon, label, divider }) => (
           <div key={to}>
             {divider && <div className="border-t border-slate-800 my-2" />}

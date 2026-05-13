@@ -152,9 +152,9 @@ export function Movimientos() {
         ))}
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      {/* Tabla con scroll horizontal en pantallas pequeñas */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+        <table className="w-full min-w-[720px] text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Tipo</th>
@@ -162,7 +162,7 @@ export function Movimientos() {
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Sala</th>
               <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Cantidad</th>
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Motivo</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Fecha</th>
+              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">Fecha</th>
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Usuario</th>
             </tr>
           </thead>
@@ -190,7 +190,7 @@ export function Movimientos() {
                 <td className="px-4 py-3 font-semibold text-slate-900 max-w-xs truncate">
                   {m.insumo}
                 </td>
-                <td className="px-4 py-3 text-slate-500">
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                   {m.sala ?? <span className="text-slate-300">—</span>}
                 </td>
                 <td className="px-4 py-3 text-center">
@@ -206,7 +206,9 @@ export function Movimientos() {
                 <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
                   {formatFecha(m.fecha)}
                 </td>
-                <td className="px-4 py-3 text-slate-500">{m.usuario}</td>
+                <td className="px-4 py-3 text-slate-500 whitespace-nowrap">
+                  {m.usuario}
+                </td>
               </tr>
             ))}
           </tbody>

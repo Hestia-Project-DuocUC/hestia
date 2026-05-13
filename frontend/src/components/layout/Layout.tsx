@@ -36,7 +36,7 @@ export function Layout() {
   if (!token) return <Navigate to="/login" replace />
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar />
       <main className="flex-1 overflow-y-auto">
         <Outlet />
@@ -70,6 +70,7 @@ export function Layout() {
               {[
                 'Importar insumos desde CSV o XLSX',
                 'Eliminar insumos del inventario',
+                'Eliminar usuarios del sistema',
               ].map(item => (
                 <li key={item} className="flex items-center gap-2 text-sm">
                   <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700

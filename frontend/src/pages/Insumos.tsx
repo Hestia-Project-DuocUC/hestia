@@ -185,7 +185,7 @@ export function Insumos() {
     setDeleting(true)
     try {
       await api.delete(`/insumos/${deleteTarget.id}`, {
-        data: { codigo_totp: deleteTotp }
+        params: { codigo_totp: deleteTotp }
       })
       showToast('Insumo eliminado')
       cerrarModal()
