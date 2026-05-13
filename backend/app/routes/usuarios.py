@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.orm import Session
 import pyotp
 
@@ -134,12 +134,12 @@ def actualizar_usuario(
 @router.delete("/{usuario_id}")
 def eliminar_usuario(
     usuario_id: int,
-    codigo_totp: str,
     request: Request,
+    codigo_totp: str = Header(alias="x-totp-code"),
     db: Session = Depends(get_db),
     admin: Usuario = Depends(require_admin),
 ):
-    """Requiere rol admin + codigo TOTP valido (query param)."""
+    """Requiere rol admin + codigo TOTP valido (header x-totp-code)."""
     if not admin.totp_habilitado or not admin.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

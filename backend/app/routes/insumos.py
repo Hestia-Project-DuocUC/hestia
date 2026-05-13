@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -249,11 +249,11 @@ def actualizar_insumo(
 @router.delete("/{insumo_id}")
 def eliminar_insumo(
     insumo_id: int,
-    codigo_totp: str,
+    codigo_totp: str = Header(alias="x-totp-code"),
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    """Requiere rol admin + codigo TOTP valido (query param)."""
+    """Requiere rol admin + codigo TOTP valido (header x-totp-code)."""
     if not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

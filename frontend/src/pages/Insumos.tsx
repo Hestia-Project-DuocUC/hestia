@@ -49,8 +49,8 @@ export function Insumos() {
   const [userHas2FA, setUserHas2FA] = useState<boolean | null>(null)
 
   // Filtros
-  const [searchInput, setSearchInput]     = useState('')      // lo que escribe el usuario
-  const [nombreFiltro, setNombreFiltro]   = useState('')      // commit al presionar Enter
+  const [searchInput, setSearchInput]     = useState('')
+  const [nombreFiltro, setNombreFiltro]   = useState('')
   const [salaFiltro, setSalaFiltro]       = useState('')
   const [catFiltro, setCatFiltro]         = useState('')
   const [bajoStock, setBajoStock]         = useState(false)
@@ -73,7 +73,6 @@ export function Insumos() {
     setToast(msg); setTimeout(() => setToast(null), 3000)
   }
 
-  // Carga salas, categorias y estado 2FA una sola vez
   useEffect(() => {
     Promise.all([
       api.get<PaginatedResponse<SalaResponse>>('/salas/', { params: { limit: 200 } }),
@@ -139,7 +138,6 @@ export function Insumos() {
     } finally { setExporting(false) }
   }
 
-  // --- Modales ---
   function abrirCrear() { setForm(FORM_VACIO); setFormError(null); setShowCrear(true) }
   function abrirEditar(i: InsumoResponse) {
     setForm(insumoAForm(i)); setFormError(null); setEditTarget(i)
@@ -185,15 +183,16 @@ export function Insumos() {
     setDeleting(true)
     try {
       await api.delete(`/insumos/${deleteTarget.id}`, {
-        params: { codigo_totp: deleteTotp }
+        headers: { 'x-totp-code': deleteTotp }
       })
       showToast('Insumo eliminado')
       cerrarModal()
       load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })
-        .response?.data?.detail
-      setFormError(msg ?? 'Error al eliminar.')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Error al eliminar.'
+      setFormError(msg)
     } finally { setDeleting(false) }
   }
 
@@ -253,7 +252,6 @@ export function Insumos() {
 
       {/* Busqueda + Filtros */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-5">
-        {/* Barra de busqueda */}
         <form onSubmit={handleSearch} className="flex gap-2 mb-3">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -276,7 +274,6 @@ export function Insumos() {
           </button>
         </form>
 
-        {/* Filtros en linea */}
         <div className="flex flex-wrap items-center gap-3">
           <SlidersHorizontal size={14} className="text-slate-400" />
           <select

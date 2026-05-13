@@ -56,7 +56,6 @@ export function Usuarios() {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // Carga estado 2FA del admin actual una sola vez
   useEffect(() => {
     api.get<{ totp_habilitado: boolean }>('/usuarios/me').then(({ data }) => {
       setUserHas2FA(data.totp_habilitado)
@@ -125,7 +124,6 @@ export function Usuarios() {
           email: form.email,
           rol: form.rol,
         }
-        // Solo enviamos password si el usuario escribio algo
         if (form.password) payload.password = form.password
         await api.put(`/usuarios/${editTarget.id}`, payload)
         showToast('Usuario actualizado')
@@ -154,15 +152,16 @@ export function Usuarios() {
     setDeleting(true)
     try {
       await api.delete(`/usuarios/${delTarget.id}`, {
-        params: { codigo_totp: deleteTotp }
+        headers: { 'x-totp-code': deleteTotp }
       })
       showToast('Usuario eliminado')
       cerrar()
       load(page * PAGE_SIZE)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })
-        .response?.data?.detail
-      setFormError(msg ?? 'Error al eliminar.')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Error al eliminar.'
+      setFormError(msg)
     } finally {
       setDeleting(false)
     }
@@ -186,7 +185,6 @@ export function Usuarios() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto">
-      {/* Toast */}
       {toast && (
         <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-teal-600
                         text-white px-4 py-3 rounded-xl shadow-lg text-sm font-semibold">
@@ -194,7 +192,6 @@ export function Usuarios() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Usuarios</h1>
@@ -207,7 +204,6 @@ export function Usuarios() {
         </button>
       </div>
 
-      {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -279,7 +275,6 @@ export function Usuarios() {
           </tbody>
         </table>
 
-        {/* Paginacion */}
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
             <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
