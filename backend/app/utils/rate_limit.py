@@ -29,12 +29,12 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 
 MAX_INTENTOS = 5
-VENTANA_SEG  = 300   # 5 minutos
-BLOQUEO_SEG  = 900   # 15 minutos
+VENTANA_SEG = 300   # 5 minutos
+BLOQUEO_SEG = 900   # 15 minutos
 
-_lock      = threading.Lock()
-_intentos:  dict[str, list[datetime]] = defaultdict(list)
-_bloqueados: dict[str, datetime]      = {}
+_lock = threading.Lock()
+_intentos: dict[str, list[datetime]] = defaultdict(list)
+_bloqueados: dict[str, datetime] = {}
 
 
 def _clave(email: str) -> str:
@@ -54,7 +54,7 @@ def verificar_limite(email: str) -> None:
         if clave in _bloqueados:
             if ahora < _bloqueados[clave]:
                 restantes = int((_bloqueados[clave] - ahora).total_seconds())
-                minutos   = restantes // 60 or 1
+                minutos = restantes // 60 or 1
                 raise HTTPException(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     detail=(
@@ -75,7 +75,7 @@ def verificar_limite(email: str) -> None:
         # 3. Verificar si ya supero el limite
         if len(_intentos[clave]) >= MAX_INTENTOS:
             _bloqueados[clave] = ahora + timedelta(seconds=BLOQUEO_SEG)
-            _intentos[clave]   = []
+            _intentos[clave] = []
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail=(
