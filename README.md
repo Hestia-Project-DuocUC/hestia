@@ -2,7 +2,7 @@
 
 **Sistema de gestión de insumos médicos — Escuela de Salud DuocUC**
 
-Hestia es una aplicación web para el control de stock de insumos e implementos en las salas clínicas de la Escuela de Salud de DuocUC, sede San Bernardo. Desarrollado por estudiantes de Informática Biomédica como proyecto de Ruta IE.
+Hestia es una aplicación web para el control de stock de insumos e implementos en las salas clínicas de la Escuela de Salud de DuocUC, sede San Bernardo. Desarrollado por estudiantes de Informática Biomédica como proyecto de titulo y para una posterior posible implementación en ayuda de los estudiantes de la misma Escuela.
 
 ---
 
