@@ -17,6 +17,7 @@ export interface UsuarioMe {
   email: string
   rol: string
   totp_habilitado: boolean
+  activo: boolean
 }
 
 export interface Setup2FAResponse {
@@ -64,6 +65,7 @@ export interface InsumoResponse {
   stock_minimo: number
   sala_id: number | null
   categoria_id: number | null
+  activo: boolean
 }
 
 export interface SalaResponse {

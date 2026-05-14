@@ -25,6 +25,8 @@ router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 TOTP_VALID_WINDOW = 1
 NUM_RECOVERY_CODES = 10
 
+CUENTA_INACTIVA_DETALLE = "Cuenta inactiva. Contacta al administrador."
+
 
 # ---------------------------------------------------------------------------
 # Modelos
@@ -125,7 +127,8 @@ def login(
     Flujo:
     1. verificar_limite() antes de tocar la BD (no revela si el email existe).
     2. Credenciales incorrectas -> registrar_fallo() + audit LOGIN_FALLIDO.
-    3. Exito -> limpiar() + audit LOGIN_EXITOSO.
+    3. Cuenta inactiva (soft-deleted) -> 403 + audit LOGIN_BLOQUEADO_INACTIVO.
+    4. Exito -> limpiar() + audit LOGIN_EXITOSO.
     Sin 2FA: devuelve JWT completo.
     Con 2FA: devuelve pre_token de vida corta.
     """
@@ -148,6 +151,20 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contrasena incorrectos",
+        )
+
+    # Credenciales validas pero la cuenta esta desactivada (soft-deleted).
+    # Se chequea DESPUES del password para no revelar existencia de cuentas.
+    if not usuario.activo:
+        registrar(
+            db, "LOGIN_BLOQUEADO_INACTIVO",
+            usuario=usuario,
+            detalle=usuario.email,
+            ip=get_ip(request),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=CUENTA_INACTIVA_DETALLE,
         )
 
     limpiar(form_data.username)
@@ -185,6 +202,11 @@ def completar_login_2fa(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o configuracion 2FA no valida",
         )
+    if not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=CUENTA_INACTIVA_DETALLE,
+        )
     verificar_limite(usuario.email)
     totp = pyotp.TOTP(usuario.totp_secret)
     if not totp.verify(datos.codigo, valid_window=TOTP_VALID_WINDOW):
@@ -221,6 +243,11 @@ def recuperar_acceso_2fa(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o configuracion 2FA no valida",
+        )
+    if not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=CUENTA_INACTIVA_DETALLE,
         )
     if not _verificar_y_consumir_recovery_code(usuario, datos.recovery_code, db):
         raise HTTPException(

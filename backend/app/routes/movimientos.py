@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from app.database import get_db
@@ -63,6 +63,17 @@ def registrar_movimiento(
     insumo = db.query(Insumo).filter(Insumo.id == mov.insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
+
+    # No se permiten movimientos sobre insumos desactivados (soft-deleted).
+    # El admin debe reactivar el insumo primero si quiere registrar stock.
+    if not insumo.activo:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"'{insumo.nombre}' esta inactivo. Reactivalo antes de "
+                "registrar movimientos."
+            ),
+        )
 
     if mov.tipo == TipoMovimiento.salida:
         if insumo.stock_actual < mov.cantidad:

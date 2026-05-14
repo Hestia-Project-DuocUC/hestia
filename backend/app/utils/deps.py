@@ -13,7 +13,10 @@ def get_usuario_actual(
     db: Session = Depends(get_db)
 ) -> Usuario:
     """Cualquier usuario autenticado con token de acceso completo.
-    Rechaza pre_tokens del flujo 2FA para evitar acceso parcial."""
+    Rechaza pre_tokens del flujo 2FA para evitar acceso parcial.
+    Rechaza usuarios desactivados (soft-delete): si un admin desactiva la
+    cuenta mientras hay un JWT en uso, la sesion deja de ser valida en la
+    siguiente request en lugar de esperar la expiracion del token."""
     excepcion = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token invalido o expirado",
@@ -35,6 +38,12 @@ def get_usuario_actual(
     usuario = db.query(Usuario).filter(Usuario.id == int(usuario_id)).first()
     if usuario is None:
         raise excepcion
+    if not usuario.activo:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cuenta inactiva. Contacta al administrador.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return usuario
 
 

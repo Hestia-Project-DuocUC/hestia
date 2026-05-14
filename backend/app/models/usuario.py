@@ -19,6 +19,13 @@ class Usuario(Base):
     password_hash = Column(String, nullable=False)
     rol = Column(Enum(RolUsuario), default=RolUsuario.visor)
 
+    # Soft-delete: una cuenta inactiva no puede iniciar sesion, pero su fila
+    # se conserva para no romper la trazabilidad de movimientos historicos
+    # (movimientos.usuario_id es FK NOT NULL). Reactivable via PUT activo=true.
+    activo = Column(
+        Boolean, default=True, nullable=False, server_default="true"
+    )
+
     # 2FA TOTP
     totp_secret = Column(String, nullable=True)
     totp_habilitado = Column(Boolean, default=False, nullable=False)

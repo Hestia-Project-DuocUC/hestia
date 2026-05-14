@@ -12,7 +12,11 @@ class UsuarioCreate(BaseModel):
 
 class UsuarioUpdate(BaseModel):
     """Actualiza un usuario existente.
+
     password es opcional: si se omite o es None, se conserva el actual.
+    activo es opcional: permite reactivar (true) o desactivar (false) sin
+    pasar por el flujo DELETE con TOTP. Por seguridad, un admin no puede
+    desactivarse a si mismo via este endpoint (validacion en el route).
     La validacion de longitud minima se hace en el route handler para
     distinguir 'no enviado' de 'enviado vacio'.
     """
@@ -20,6 +24,7 @@ class UsuarioUpdate(BaseModel):
     email: EmailStr
     rol: RolUsuario
     password: Optional[str] = None
+    activo: Optional[bool] = None
 
 
 class UsuarioResponse(BaseModel):
@@ -28,6 +33,7 @@ class UsuarioResponse(BaseModel):
     email: str
     rol: RolUsuario
     totp_habilitado: bool = False
+    activo: bool = True
 
     class Config:
         from_attributes = True

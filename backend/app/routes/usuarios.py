@@ -21,11 +21,18 @@ TOTP_VALID_WINDOW = 1
 def listar_usuarios(
     skip: int = 0,
     limit: int = 20,
+    incluir_inactivos: bool = False,
     db: Session = Depends(get_db),
     admin: Usuario = Depends(require_admin),
 ):
-    total = db.query(Usuario).count()
-    usuarios = db.query(Usuario).offset(skip).limit(limit).all()
+    """Lista usuarios. Por defecto excluye los desactivados (soft-deleted).
+    Pasar incluir_inactivos=true para verlos todos en el panel de admin.
+    """
+    q = db.query(Usuario)
+    if not incluir_inactivos:
+        q = q.filter(Usuario.activo.is_(True))
+    total = q.count()
+    usuarios = q.offset(skip).limit(limit).all()
     return {"total": total, "skip": skip, "limit": limit, "data": usuarios}
 
 
@@ -95,10 +102,12 @@ def actualizar_usuario(
     db: Session = Depends(get_db),
     admin: Usuario = Depends(require_admin),
 ):
-    """Actualiza nombre, email y rol. La contrasena solo cambia si se envia.
+    """Actualiza nombre, email, rol, contrasena (opcional) y estado activo.
 
-    Validacion de email: si cambia, verifica que no exista en otro usuario.
-    Validacion de password: si se envia, debe tener minimo 8 caracteres.
+    - Validacion de email: si cambia, verifica que no exista en otro usuario.
+    - Validacion de password: si se envia, debe tener minimo 8 caracteres.
+    - Cambio de activo: queda registrado en audit_log como REACTIVAR_USUARIO o
+      DESACTIVAR_USUARIO. Un admin no puede desactivarse a si mismo.
     """
     encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not encontrado:
@@ -115,11 +124,24 @@ def actualizar_usuario(
             detail="La contrasena nueva debe tener al menos 8 caracteres",
         )
 
+    cambio_activo: str | None = None
+    if datos.activo is not None and datos.activo != encontrado.activo:
+        if encontrado.id == admin.id and datos.activo is False:
+            raise HTTPException(
+                status_code=400,
+                detail="No puedes desactivarte a ti mismo",
+            )
+        cambio_activo = (
+            "REACTIVAR_USUARIO" if datos.activo else "DESACTIVAR_USUARIO"
+        )
+
     encontrado.nombre = datos.nombre
     encontrado.email = datos.email
     encontrado.rol = datos.rol
     if datos.password:
         encontrado.password_hash = hashear_password(datos.password)
+    if datos.activo is not None:
+        encontrado.activo = datos.activo
 
     db.commit()
     db.refresh(encontrado)
@@ -128,6 +150,12 @@ def actualizar_usuario(
         entidad="usuario", entidad_id=encontrado.id,
         detalle=encontrado.email, ip=get_ip(request),
     )
+    if cambio_activo:
+        registrar(
+            db, cambio_activo, usuario=admin,
+            entidad="usuario", entidad_id=encontrado.id,
+            detalle=encontrado.email, ip=get_ip(request),
+        )
     return encontrado
 
 
@@ -139,34 +167,51 @@ def eliminar_usuario(
     db: Session = Depends(get_db),
     admin: Usuario = Depends(require_admin),
 ):
-    """Requiere rol admin + codigo TOTP valido (header x-totp-code)."""
+    """Soft-delete: marca al usuario como inactivo (activo=false).
+
+    Antes este endpoint hacia DELETE fisico y fallaba con FK violation cuando
+    el usuario tenia movimientos asociados (movimientos.usuario_id es NOT NULL
+    sin ON DELETE policy). El resultado era un 500 sin JSON y el frontend
+    mostraba un generico 'Error al eliminar' sin detalle.
+
+    Ahora la fila se conserva: el usuario pierde acceso (no puede iniciar
+    sesion, ni con sesion activa, ver deps.get_usuario_actual) pero su
+    historial de movimientos sigue siendo trazable. Reactivable via
+    PUT /usuarios/{id} con activo=true.
+
+    Requiere rol admin + codigo TOTP valido (header x-totp-code).
+    """
     if not admin.totp_habilitado or not admin.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Debes tener el 2FA activado para eliminar usuarios."
+            detail="Debes tener el 2FA activado para desactivar usuarios."
         )
     totp = pyotp.TOTP(admin.totp_secret)
     if not totp.verify(codigo_totp, valid_window=TOTP_VALID_WINDOW):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Codigo 2FA incorrecto. El usuario no fue eliminado."
+            detail="Codigo 2FA incorrecto. El usuario no fue desactivado."
         )
     encontrado = db.query(Usuario).filter(Usuario.id == usuario_id).first()
     if not encontrado:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if encontrado.id == admin.id:
         raise HTTPException(
-            status_code=400, detail="No puedes eliminarte a ti mismo"
+            status_code=400, detail="No puedes desactivarte a ti mismo"
         )
-    email_eliminado = encontrado.email
-    db.delete(encontrado)
+    if not encontrado.activo:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{encontrado.nombre} ya esta inactivo",
+        )
+    encontrado.activo = False
     db.commit()
     registrar(
-        db, "ELIMINAR_USUARIO", usuario=admin,
-        entidad="usuario",
-        detalle=email_eliminado, ip=get_ip(request),
+        db, "DESACTIVAR_USUARIO", usuario=admin,
+        entidad="usuario", entidad_id=encontrado.id,
+        detalle=encontrado.email, ip=get_ip(request),
     )
-    return {"mensaje": "Usuario eliminado"}
+    return {"mensaje": f"Usuario {encontrado.nombre} desactivado"}
 
 
 @router.post("/{usuario_id}/reset-2fa")

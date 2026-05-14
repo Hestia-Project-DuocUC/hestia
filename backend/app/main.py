@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 from starlette.middleware.base import BaseHTTPMiddleware
-from app.database import Base, engine
+from app.database import Base, engine, aplicar_migraciones_pendientes
 # Importar todos los modelos para que SQLAlchemy registre sus tablas.
 # create_all() necesita conocer TODOS los modelos antes de ejecutarse.
 from app.models import sala, categoria, usuario, movimiento, insumo  # noqa
@@ -11,7 +11,10 @@ from app.routes import (
 )
 from app.routes import audit_log as audit_log_routes
 
+# 1) crea tablas que no existen. 2) aplica ALTER TABLE idempotentes para
+# columnas agregadas a tablas ya existentes (ver database.py).
 Base.metadata.create_all(bind=engine)
+aplicar_migraciones_pendientes()
 
 app = FastAPI(
     title="Hestia",

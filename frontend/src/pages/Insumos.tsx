@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Search, Package, ChevronLeft, ChevronRight,
-  Plus, Pencil, Trash2, CheckCircle, ShieldAlert,
+  Plus, Pencil, Archive, ArchiveRestore, CheckCircle, ShieldAlert,
   Download, X, SlidersHorizontal
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
@@ -54,20 +54,22 @@ export function Insumos() {
   const [salaFiltro, setSalaFiltro]       = useState('')
   const [catFiltro, setCatFiltro]         = useState('')
   const [bajoStock, setBajoStock]         = useState(false)
-  const hasFilters = nombreFiltro || salaFiltro || catFiltro || bajoStock
+  const [mostrarInactivos, setMostrar]    = useState(false)
+  const hasFilters = nombreFiltro || salaFiltro || catFiltro || bajoStock || mostrarInactivos
 
   // Modales
-  const [editTarget, setEditTarget]     = useState<InsumoResponse | null>(null)
-  const [showCrear, setShowCrear]       = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<InsumoResponse | null>(null)
-  const [deleteStep, setDeleteStep]     = useState<'confirm' | 'totp'>('confirm')
-  const [deleteTotp, setDeleteTotp]     = useState('')
-  const [form, setForm]                 = useState<FormState>(FORM_VACIO)
-  const [saving, setSaving]             = useState(false)
-  const [formError, setFormError]       = useState<string | null>(null)
-  const [deleting, setDeleting]         = useState(false)
-  const [toast, setToast]               = useState<string | null>(null)
-  const [exporting, setExporting]       = useState(false)
+  const [editTarget, setEditTarget]         = useState<InsumoResponse | null>(null)
+  const [showCrear, setShowCrear]           = useState(false)
+  const [deleteTarget, setDeleteTarget]     = useState<InsumoResponse | null>(null)
+  const [reactivarTarget, setReactivar]     = useState<InsumoResponse | null>(null)
+  const [deleteStep, setDeleteStep]         = useState<'confirm' | 'totp'>('confirm')
+  const [deleteTotp, setDeleteTotp]         = useState('')
+  const [form, setForm]                     = useState<FormState>(FORM_VACIO)
+  const [saving, setSaving]                 = useState(false)
+  const [formError, setFormError]           = useState<string | null>(null)
+  const [deleting, setDeleting]             = useState(false)
+  const [toast, setToast]                   = useState<string | null>(null)
+  const [exporting, setExporting]           = useState(false)
 
   function showToast(msg: string) {
     setToast(msg); setTimeout(() => setToast(null), 3000)
@@ -90,7 +92,8 @@ export function Insumos() {
     nombre: string,
     sala_id: string,
     categoria_id: string,
-    bajo_stock: boolean
+    bajo_stock: boolean,
+    incluir_inactivos: boolean
   ) => {
     setLoading(true)
     try {
@@ -101,6 +104,7 @@ export function Insumos() {
       if (sala_id) params.sala_id = parseInt(sala_id)
       if (categoria_id) params.categoria_id = parseInt(categoria_id)
       if (bajo_stock) params.bajo_stock = true
+      if (incluir_inactivos) params.incluir_inactivos = true
       const { data } = await api.get<PaginatedResponse<InsumoResponse>>('/insumos/', { params })
       setInsumos(data.data)
       setTotal(data.total)
@@ -108,8 +112,8 @@ export function Insumos() {
   }, [])
 
   useEffect(() => {
-    load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
-  }, [page, nombreFiltro, salaFiltro, catFiltro, bajoStock, load])
+    load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock, mostrarInactivos)
+  }, [page, nombreFiltro, salaFiltro, catFiltro, bajoStock, mostrarInactivos, load])
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault(); setNombreFiltro(searchInput); setPage(0)
@@ -118,7 +122,7 @@ export function Insumos() {
   function limpiarFiltros() {
     setSearchInput(''); setNombreFiltro('')
     setSalaFiltro(''); setCatFiltro('')
-    setBajoStock(false); setPage(0)
+    setBajoStock(false); setMostrar(false); setPage(0)
   }
 
   async function handleExportar() {
@@ -129,6 +133,7 @@ export function Insumos() {
       if (salaFiltro) params.sala_id = parseInt(salaFiltro)
       if (catFiltro) params.categoria_id = parseInt(catFiltro)
       if (bajoStock) params.bajo_stock = true
+      if (mostrarInactivos) params.incluir_inactivos = true
       const res = await api.get('/insumos/exportar', { params, responseType: 'blob' })
       const url = URL.createObjectURL(res.data)
       const a = document.createElement('a')
@@ -145,9 +150,13 @@ export function Insumos() {
   function abrirEliminar(i: InsumoResponse) {
     setDeleteTarget(i); setDeleteStep('confirm'); setDeleteTotp(''); setFormError(null)
   }
+  function abrirReactivar(i: InsumoResponse) {
+    setReactivar(i); setFormError(null)
+  }
   function cerrarModal() {
     setShowCrear(false); setEditTarget(null)
-    setDeleteTarget(null); setFormError(null); setDeleteTotp('')
+    setDeleteTarget(null); setReactivar(null)
+    setFormError(null); setDeleteTotp('')
   }
   function setField(k: keyof FormState, v: string) { setForm(f => ({ ...f, [k]: v })) }
 
@@ -170,7 +179,7 @@ export function Insumos() {
         showToast('Insumo creado')
       }
       cerrarModal()
-      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
+      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock, mostrarInactivos)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
@@ -185,13 +194,29 @@ export function Insumos() {
       await api.delete(`/insumos/${deleteTarget.id}`, {
         headers: { 'x-totp-code': deleteTotp }
       })
-      showToast('Insumo eliminado')
+      showToast(`'${deleteTarget.nombre}' desactivado`)
       cerrarModal()
-      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock)
+      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock, mostrarInactivos)
     } catch (err: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detail = (err as any)?.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Error al eliminar.'
+      const msg = typeof detail === 'string' ? detail : 'Error al desactivar.'
+      setFormError(msg)
+    } finally { setDeleting(false) }
+  }
+
+  async function handleReactivar() {
+    if (!reactivarTarget) return
+    setDeleting(true)
+    try {
+      await api.put(`/insumos/${reactivarTarget.id}`, { activo: true })
+      showToast(`'${reactivarTarget.nombre}' reactivado`)
+      cerrarModal()
+      load(page * PAGE_SIZE, nombreFiltro, salaFiltro, catFiltro, bajoStock, mostrarInactivos)
+    } catch (err: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Error al reactivar.'
       setFormError(msg)
     } finally { setDeleting(false) }
   }
@@ -304,6 +329,16 @@ export function Insumos() {
             />
             <span className="text-sm font-semibold text-slate-600">Solo bajo stock</span>
           </label>
+          {puedeEliminar && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox" checked={mostrarInactivos}
+                onChange={e => { setMostrar(e.target.checked); setPage(0) }}
+                className="w-4 h-4 rounded accent-teal-600"
+              />
+              <span className="text-sm font-semibold text-slate-600">Mostrar inactivos</span>
+            </label>
+          )}
           {hasFilters && (
             <button
               onClick={limpiarFiltros}
@@ -352,8 +387,14 @@ export function Insumos() {
               </tr>
             ) : (
               insumos.map(i => (
-                <tr key={i.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{i.nombre}</td>
+                <tr key={i.id}
+                  className={`hover:bg-slate-50 transition-colors ${i.activo ? '' : 'opacity-60'}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-slate-900">{i.nombre}</span>
+                      {!i.activo && <Badge variant="danger">Inactivo</Badge>}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-slate-500 max-w-xs truncate">
                     {i.descripcion ?? <span className="text-slate-300">—</span>}
                   </td>
@@ -363,17 +404,32 @@ export function Insumos() {
                   {puedeEscribir && (
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => abrirEditar(i)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
-                                     hover:text-teal-600 transition-colors">
-                          <Pencil size={14} />
-                        </button>
-                        {puedeEliminar && (
-                          <button onClick={() => abrirEliminar(i)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
-                                       hover:text-rose-600 transition-colors">
-                            <Trash2 size={14} />
-                          </button>
+                        {i.activo ? (
+                          <>
+                            <button onClick={() => abrirEditar(i)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
+                                         hover:text-teal-600 transition-colors" title="Editar">
+                              <Pencil size={14} />
+                            </button>
+                            {puedeEliminar && (
+                              <button onClick={() => abrirEliminar(i)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
+                                           hover:text-rose-600 transition-colors"
+                                title="Desactivar insumo">
+                                <Archive size={14} />
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          puedeEliminar && (
+                            <button onClick={() => abrirReactivar(i)}
+                              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg
+                                         bg-emerald-50 hover:bg-emerald-100 text-emerald-700
+                                         text-xs font-bold transition-colors"
+                              title="Reactivar insumo">
+                              <ArchiveRestore size={12} /> Reactivar
+                            </button>
+                          )
                         )}
                       </div>
                     </td>
@@ -471,18 +527,20 @@ export function Insumos() {
         </Modal>
       )}
 
-      {/* Modal eliminar: dos pasos */}
+      {/* Modal desactivar: dos pasos con TOTP */}
       {deleteTarget && (
-        <Modal title="Eliminar insumo" onClose={cerrarModal} size="sm">
+        <Modal title="Desactivar insumo" onClose={cerrarModal} size="sm">
           {deleteStep === 'confirm' ? (
             <div className="text-center">
               <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center
                               justify-center mx-auto mb-4">
-                <Trash2 size={24} className="text-rose-600" />
+                <Archive size={24} className="text-rose-600" />
               </div>
-              <p className="font-bold text-slate-900 mb-1">¿Eliminar este insumo?</p>
+              <p className="font-bold text-slate-900 mb-1">¿Desactivar este insumo?</p>
               <p className="text-slate-500 text-sm mb-3">
-                <strong>{deleteTarget.nombre}</strong> sera eliminado permanentemente.
+                <strong>{deleteTarget.nombre}</strong> desaparecera de los listados
+                y no se le podran registrar movimientos. Su historial se conserva
+                y puede reactivarse cuando quieras.
               </p>
               {userHas2FA === false ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
@@ -491,7 +549,7 @@ export function Insumos() {
                     <div>
                       <p className="text-amber-800 font-bold text-xs">2FA requerido</p>
                       <p className="text-amber-700 text-xs mt-0.5">
-                        Activa la verificacion en dos pasos para eliminar insumos.
+                        Activa la verificacion en dos pasos para desactivar insumos.
                       </p>
                     </div>
                   </div>
@@ -521,7 +579,7 @@ export function Insumos() {
           ) : (
             <div>
               <p className="text-slate-600 text-sm mb-5 text-center">
-                Ingresa tu codigo TOTP para confirmar la eliminacion de
+                Ingresa tu codigo TOTP para confirmar la desactivacion de
                 <strong> {deleteTarget.nombre}</strong>.
               </p>
               <input
@@ -540,18 +598,49 @@ export function Insumos() {
                               px-3 py-2 rounded-lg font-semibold mb-4">{formError}</p>
               )}
               <div className="flex gap-3">
-                <button onClick={() => setDeleteStep('confirm')}
+                <button onClick={() => { setDeleteStep('confirm'); setFormError(null) }}
                   className="flex-1 py-2.5 rounded-xl border border-slate-200
                              text-slate-600 font-bold hover:bg-slate-50">← Volver</button>
                 <button onClick={confirmDelete}
                   disabled={deleting || deleteTotp.length !== 6}
                   className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
                              text-white font-bold disabled:opacity-50">
-                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                  {deleting ? 'Desactivando...' : 'Desactivar'}
                 </button>
               </div>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* Modal reactivar: sin TOTP */}
+      {reactivarTarget && (
+        <Modal title="Reactivar insumo" onClose={cerrarModal} size="sm">
+          <div className="text-center">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center
+                            justify-center mx-auto mb-4">
+              <ArchiveRestore size={24} className="text-emerald-600" />
+            </div>
+            <p className="font-bold text-slate-900 mb-1">¿Reactivar este insumo?</p>
+            <p className="text-slate-500 text-sm mb-5">
+              <strong>{reactivarTarget.nombre}</strong> volvera a aparecer en
+              los listados y podra recibir movimientos de stock.
+            </p>
+            {formError && (
+              <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
+                            px-3 py-2 rounded-lg mb-4">{formError}</p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={cerrarModal}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200
+                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+              <button onClick={handleReactivar} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700
+                           text-white font-bold disabled:opacity-50">
+                {deleting ? 'Reactivando...' : 'Reactivar'}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>

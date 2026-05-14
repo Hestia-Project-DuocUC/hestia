@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Users, Plus, Pencil, Trash2, CheckCircle,
+  Users, Plus, Pencil, Archive, ArchiveRestore, CheckCircle,
   ShieldOff, Shield, ShieldAlert
 } from 'lucide-react'
 import { api } from '../api/client'
@@ -35,21 +35,23 @@ interface FormState {
 const FORM_INICIAL: FormState = { nombre: '', email: '', password: '', rol: 'visor' }
 
 export function Usuarios() {
-  const [usuarios, setUsuarios]     = useState<UsuarioMe[]>([])
-  const [total, setTotal]           = useState(0)
-  const [page, setPage]             = useState(0)
-  const [loading, setLoading]       = useState(true)
-  const [showCrear, setShowCrear]   = useState(false)
-  const [editTarget, setEditTarget] = useState<UsuarioMe | null>(null)
-  const [delTarget, setDelTarget]   = useState<UsuarioMe | null>(null)
-  const [form, setForm]             = useState<FormState>(FORM_INICIAL)
-  const [saving, setSaving]         = useState(false)
-  const [deleting, setDeleting]     = useState(false)
-  const [formError, setFormError]   = useState<string | null>(null)
-  const [toast, setToast]           = useState<string | null>(null)
-  const [deleteStep, setDeleteStep] = useState<'confirm' | 'totp'>('confirm')
-  const [deleteTotp, setDeleteTotp] = useState('')
-  const [userHas2FA, setUserHas2FA] = useState<boolean | null>(null)
+  const [usuarios, setUsuarios]           = useState<UsuarioMe[]>([])
+  const [total, setTotal]                 = useState(0)
+  const [page, setPage]                   = useState(0)
+  const [loading, setLoading]             = useState(true)
+  const [mostrarInactivos, setMostrar]    = useState(false)
+  const [showCrear, setShowCrear]         = useState(false)
+  const [editTarget, setEditTarget]       = useState<UsuarioMe | null>(null)
+  const [delTarget, setDelTarget]         = useState<UsuarioMe | null>(null)
+  const [reactivarTarget, setReactivar]   = useState<UsuarioMe | null>(null)
+  const [form, setForm]                   = useState<FormState>(FORM_INICIAL)
+  const [saving, setSaving]               = useState(false)
+  const [deleting, setDeleting]           = useState(false)
+  const [formError, setFormError]         = useState<string | null>(null)
+  const [toast, setToast]                 = useState<string | null>(null)
+  const [deleteStep, setDeleteStep]       = useState<'confirm' | 'totp'>('confirm')
+  const [deleteTotp, setDeleteTotp]       = useState('')
+  const [userHas2FA, setUserHas2FA]       = useState<boolean | null>(null)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -62,20 +64,27 @@ export function Usuarios() {
     }).catch(() => {})
   }, [])
 
-  const load = useCallback(async (skip: number) => {
+  const load = useCallback(async (skip: number, incluirInactivos: boolean) => {
     setLoading(true)
     try {
       const { data } = await api.get<PaginatedResponse<UsuarioMe>>('/usuarios/', {
-        params: { skip, limit: PAGE_SIZE },
+        params: {
+          skip,
+          limit: PAGE_SIZE,
+          incluir_inactivos: incluirInactivos,
+        },
       })
       setUsuarios(data.data)
       setTotal(data.total)
+    } catch {
+      setUsuarios([])
+      setTotal(0)
     } finally {
       setLoading(false)
     }
   }, [])
 
-  useEffect(() => { load(page * PAGE_SIZE) }, [page, load])
+  useEffect(() => { load(page * PAGE_SIZE, mostrarInactivos) }, [page, mostrarInactivos, load])
 
   function abrirCrear() {
     setForm(FORM_INICIAL)
@@ -93,6 +102,7 @@ export function Usuarios() {
     setShowCrear(false)
     setEditTarget(null)
     setDelTarget(null)
+    setReactivar(null)
     setFormError(null)
     setDeleteStep('confirm')
     setDeleteTotp('')
@@ -137,7 +147,7 @@ export function Usuarios() {
         showToast('Usuario creado')
       }
       cerrar()
-      load(page * PAGE_SIZE)
+      load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
@@ -154,13 +164,36 @@ export function Usuarios() {
       await api.delete(`/usuarios/${delTarget.id}`, {
         headers: { 'x-totp-code': deleteTotp }
       })
-      showToast('Usuario eliminado')
+      showToast(`${delTarget.nombre} desactivado`)
       cerrar()
-      load(page * PAGE_SIZE)
+      load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detail = (err as any)?.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Error al eliminar.'
+      const msg = typeof detail === 'string' ? detail : 'Error al desactivar.'
+      setFormError(msg)
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  async function handleReactivar() {
+    if (!reactivarTarget) return
+    setDeleting(true)
+    try {
+      await api.put(`/usuarios/${reactivarTarget.id}`, {
+        nombre: reactivarTarget.nombre,
+        email: reactivarTarget.email,
+        rol: reactivarTarget.rol,
+        activo: true,
+      })
+      showToast(`${reactivarTarget.nombre} reactivado`)
+      cerrar()
+      load(page * PAGE_SIZE, mostrarInactivos)
+    } catch (err: unknown) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const detail = (err as any)?.response?.data?.detail
+      const msg = typeof detail === 'string' ? detail : 'Error al reactivar.'
       setFormError(msg)
     } finally {
       setDeleting(false)
@@ -172,7 +205,7 @@ export function Usuarios() {
     try {
       await api.post(`/usuarios/${u.id}/reset-2fa`)
       showToast(`2FA desactivado para ${u.nombre}`)
-      load(page * PAGE_SIZE)
+      load(page * PAGE_SIZE, mostrarInactivos)
     } catch {
       showToast('Error al desactivar el 2FA.')
     }
@@ -195,20 +228,32 @@ export function Usuarios() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Usuarios</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{total} usuarios registrados</p>
+          <p className="text-slate-500 text-sm mt-0.5">
+            {total} {mostrarInactivos ? 'usuarios (incluye inactivos)' : 'usuarios activos'}
+          </p>
         </div>
-        <button onClick={abrirCrear}
-          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
-                     font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
-          <Plus size={16} /> Nuevo usuario
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox" checked={mostrarInactivos}
+              onChange={e => { setMostrar(e.target.checked); setPage(0) }}
+              className="w-4 h-4 rounded accent-teal-600"
+            />
+            <span className="text-sm font-semibold text-slate-600">Mostrar inactivos</span>
+          </label>
+          <button onClick={abrirCrear}
+            className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
+                       font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
+            <Plus size={16} /> Nuevo usuario
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
-              {['Nombre', 'Email', 'Rol', '2FA', 'Acciones'].map(h => (
+              {['Nombre', 'Email', 'Rol', 'Estado', '2FA', 'Acciones'].map(h => (
                 <th key={h}
                   className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">
                   {h}
@@ -220,7 +265,7 @@ export function Usuarios() {
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 5 }).map((__, j) => (
+                  {Array.from({ length: 6 }).map((__, j) => (
                     <td key={j} className="px-4 py-3">
                       <div className="skeleton h-4 rounded w-24" />
                     </td>
@@ -229,19 +274,26 @@ export function Usuarios() {
               ))
             ) : usuarios.length === 0 ? (
               <tr>
-                <td colSpan={5} className="text-center py-16 text-slate-400">
+                <td colSpan={6} className="text-center py-16 text-slate-400">
                   <Users size={32} className="mx-auto mb-2 opacity-30" />
                   <p className="font-semibold">Sin usuarios registrados</p>
                 </td>
               </tr>
             ) : usuarios.map(u => (
-              <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+              <tr key={u.id}
+                className={`hover:bg-slate-50 transition-colors ${u.activo ? '' : 'opacity-60'}`}>
                 <td className="px-4 py-3 font-semibold text-slate-900">{u.nombre}</td>
                 <td className="px-4 py-3 text-slate-500">{u.email}</td>
                 <td className="px-4 py-3">
                   <Badge variant={ROL_VARIANT[u.rol as Rol] ?? 'info'}>
                     {ROL_LABEL[u.rol as Rol] ?? u.rol}
                   </Badge>
+                </td>
+                <td className="px-4 py-3">
+                  {u.activo
+                    ? <Badge variant="success">Activo</Badge>
+                    : <Badge variant="danger">Inactivo</Badge>
+                  }
                 </td>
                 <td className="px-4 py-3">
                   {u.totp_habilitado
@@ -251,23 +303,34 @@ export function Usuarios() {
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1">
-                    <button onClick={() => abrirEditar(u)}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
-                                 hover:text-teal-600 transition-colors" title="Editar">
-                      <Pencil size={14} />
-                    </button>
-                    {u.totp_habilitado && (
-                      <button onClick={() => handleReset2FA(u)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-50
-                                   hover:text-amber-600 transition-colors" title="Desactivar 2FA">
-                        <ShieldOff size={14} />
+                    {u.activo ? (
+                      <>
+                        <button onClick={() => abrirEditar(u)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-teal-50
+                                     hover:text-teal-600 transition-colors" title="Editar">
+                          <Pencil size={14} />
+                        </button>
+                        {u.totp_habilitado && (
+                          <button onClick={() => handleReset2FA(u)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-amber-50
+                                       hover:text-amber-600 transition-colors" title="Desactivar 2FA">
+                            <ShieldOff size={14} />
+                          </button>
+                        )}
+                        <button onClick={() => { setDelTarget(u); setFormError(null) }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
+                                     hover:text-rose-600 transition-colors" title="Desactivar usuario">
+                          <Archive size={14} />
+                        </button>
+                      </>
+                    ) : (
+                      <button onClick={() => { setReactivar(u); setFormError(null) }}
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg
+                                   bg-emerald-50 hover:bg-emerald-100 text-emerald-700
+                                   text-xs font-bold transition-colors" title="Reactivar usuario">
+                        <ArchiveRestore size={12} /> Reactivar
                       </button>
                     )}
-                    <button onClick={() => { setDelTarget(u); setFormError(null) }}
-                      className="p-1.5 rounded-lg text-slate-400 hover:bg-rose-50
-                                 hover:text-rose-600 transition-colors" title="Eliminar">
-                      <Trash2 size={14} />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -361,19 +424,20 @@ export function Usuarios() {
         </Modal>
       )}
 
-      {/* Modal eliminar — dos pasos con TOTP */}
+      {/* Modal desactivar — dos pasos con TOTP */}
       {delTarget && (
-        <Modal title="Eliminar usuario" onClose={cerrar} size="sm">
+        <Modal title="Desactivar usuario" onClose={cerrar} size="sm">
           {deleteStep === 'confirm' ? (
             <div className="text-center">
               <div className="w-14 h-14 bg-rose-100 rounded-full flex items-center
                               justify-center mx-auto mb-4">
-                <Trash2 size={24} className="text-rose-600" />
+                <Archive size={24} className="text-rose-600" />
               </div>
-              <p className="font-bold text-slate-900 mb-1">¿Eliminar este usuario?</p>
+              <p className="font-bold text-slate-900 mb-1">¿Desactivar este usuario?</p>
               <p className="text-slate-500 text-sm mb-3">
-                <strong>{delTarget.nombre}</strong> ({delTarget.email}) sera eliminado
-                permanentemente y no podra iniciar sesion.
+                <strong>{delTarget.nombre}</strong> ({delTarget.email}) no podra
+                iniciar sesion. Su historial de movimientos se conserva por
+                trazabilidad y puede ser reactivado cuando quieras.
               </p>
               {userHas2FA === false ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
@@ -382,7 +446,7 @@ export function Usuarios() {
                     <div>
                       <p className="text-amber-800 font-bold text-xs">2FA requerido</p>
                       <p className="text-amber-700 text-xs mt-0.5">
-                        Activa la verificacion en dos pasos para eliminar usuarios.
+                        Activa la verificacion en dos pasos para desactivar usuarios.
                       </p>
                     </div>
                   </div>
@@ -416,7 +480,7 @@ export function Usuarios() {
           ) : (
             <div>
               <p className="text-slate-600 text-sm mb-5 text-center">
-                Ingresa tu codigo TOTP para confirmar la eliminacion de
+                Ingresa tu codigo TOTP para confirmar la desactivacion de
                 <strong> {delTarget.nombre}</strong>.
               </p>
               <input
@@ -442,11 +506,42 @@ export function Usuarios() {
                   disabled={deleting || deleteTotp.length !== 6}
                   className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700
                              text-white font-bold disabled:opacity-50">
-                  {deleting ? 'Eliminando...' : 'Eliminar'}
+                  {deleting ? 'Desactivando...' : 'Desactivar'}
                 </button>
               </div>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* Modal reactivar — sin TOTP */}
+      {reactivarTarget && (
+        <Modal title="Reactivar usuario" onClose={cerrar} size="sm">
+          <div className="text-center">
+            <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center
+                            justify-center mx-auto mb-4">
+              <ArchiveRestore size={24} className="text-emerald-600" />
+            </div>
+            <p className="font-bold text-slate-900 mb-1">¿Reactivar este usuario?</p>
+            <p className="text-slate-500 text-sm mb-5">
+              <strong>{reactivarTarget.nombre}</strong> ({reactivarTarget.email})
+              podra volver a iniciar sesion con sus credenciales actuales.
+            </p>
+            {formError && (
+              <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
+                            px-3 py-2 rounded-lg mb-4">{formError}</p>
+            )}
+            <div className="flex gap-3">
+              <button onClick={cerrar}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200
+                           text-slate-600 font-bold hover:bg-slate-50">Cancelar</button>
+              <button onClick={handleReactivar} disabled={deleting}
+                className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700
+                           text-white font-bold disabled:opacity-50">
+                {deleting ? 'Reactivando...' : 'Reactivar'}
+              </button>
+            </div>
+          </div>
         </Modal>
       )}
     </div>
