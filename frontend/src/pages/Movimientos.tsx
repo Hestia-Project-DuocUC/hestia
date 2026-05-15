@@ -21,6 +21,16 @@ function formatFecha(fecha: string) {
   })
 }
 
+function formatAntiguedad(fecha: Date): string {
+  const diff = Math.floor((Date.now() - fecha.getTime()) / 1000)
+  if (diff < 60) return 'Actualizado hace un momento'
+  if (diff < 3600) return `Actualizado hace ${Math.floor(diff / 60)} min`
+  return `Actualizado el ${fecha.toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })}`
+}
+
 export function Movimientos() {
   const { user } = useAuthStore()
   const puedeRegistrar = user?.rol === 'admin' || user?.rol === 'operador'
@@ -30,6 +40,7 @@ export function Movimientos() {
   const [page, setPage]               = useState(0)
   const [filtro, setFiltro]           = useState<TipoMovimiento | 'todos'>('todos')
   const [loading, setLoading]         = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   // Modal registrar
   const [showModal, setShowModal]     = useState(false)
@@ -53,6 +64,7 @@ export function Movimientos() {
         '/movimientos/', { params: { skip, limit: PAGE_SIZE } }
       )
       setMovimientos(data.data); setTotal(data.total)
+      setLastUpdated(new Date())
     } finally { setLoading(false) }
   }, [])
 
@@ -118,6 +130,9 @@ export function Movimientos() {
           <p className="text-slate-500 text-sm mt-0.5">
             {total} movimientos registrados
           </p>
+          {lastUpdated && (
+            <p className="text-xs text-slate-400 mt-0.5">{formatAntiguedad(lastUpdated)}</p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => { load(page * PAGE_SIZE) }}
