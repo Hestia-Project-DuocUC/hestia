@@ -115,26 +115,23 @@ export function Login() {
           <div className="inline-flex items-center justify-center w-32 h-32 mb-4">
             <Logo className="w-32 h-32"/>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight">Hestia</h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Sistema de Gestion de Insumos — DuocUC
-          </p>
+          <h1 className="text-4xl font-black text-white tracking-tight">Hestia</h1>
         </div>
 
         <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl p-7">
           {!is2FA ? (
             <>
-              <h2 className="text-base font-bold text-white mb-5">Iniciar sesion</h2>
+              <h2 className="text-base font-bold text-white mb-5">Iniciar sesión</h2>
               <form onSubmit={handleLogin} className="space-y-4">
                 <div>
-                  <label className={labelCls}>Correo electronico</label>
+                  <label className={labelCls}>Correo electrónico</label>
                   <input type="email" value={email}
                     onChange={e => { setEmail(e.target.value); setError(null) }}
-                    className={inputCls} placeholder="usuario@hestia.cl" required
+                    className={inputCls} placeholder="usuario@hestia.duoc.cl" required
                   />
                 </div>
                 <div>
-                  <label className={labelCls}>Contrasena</label>
+                  <label className={labelCls}>Contraseña</label>
                   <input
                     type="password" value={password}
                     onChange={e => { setPassword(e.target.value); setError(null) }}
