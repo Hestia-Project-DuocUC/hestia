@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
-  ArrowUpCircle, ArrowDownCircle, Plus, RefreshCw, CheckCircle
+  ArrowUpCircle, ArrowDownCircle, Plus, RefreshCw, CheckCircle,
+  Search, Download, FileText, X, SlidersHorizontal
 } from 'lucide-react'
 import { api } from '../api/client'
 import { useAuthStore } from '../store/auth'
@@ -31,6 +32,15 @@ function formatAntiguedad(fecha: Date): string {
   })}`
 }
 
+interface Filtros {
+  insumo: string
+  tipo: TipoMovimiento | 'todos'
+  fecha_desde: string
+  fecha_hasta: string
+}
+
+const FILTROS_VACIOS: Filtros = { insumo: '', tipo: 'todos', fecha_desde: '', fecha_hasta: '' }
+
 export function Movimientos() {
   const { user } = useAuthStore()
   const puedeRegistrar = user?.rol === 'admin' || user?.rol === 'operador'
@@ -38,37 +48,102 @@ export function Movimientos() {
   const [movimientos, setMovimientos] = useState<MovimientoEnriquecido[]>([])
   const [total, setTotal]             = useState(0)
   const [page, setPage]               = useState(0)
-  const [filtro, setFiltro]           = useState<TipoMovimiento | 'todos'>('todos')
   const [loading, setLoading]         = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
+  // Filtros activos (los que se envian al backend)
+  const [filtros, setFiltros]         = useState<Filtros>(FILTROS_VACIOS)
+  // Valor del input de busqueda (se aplica al hacer submit o limpiar)
+  const [searchInput, setSearchInput] = useState('')
+
+  const hasFilters = filtros.insumo || filtros.tipo !== 'todos'
+    || filtros.fecha_desde || filtros.fecha_hasta
+
+  // Dropdown exportar
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const [exporting, setExporting]           = useState(false)
+  const exportRef                           = useRef<HTMLDivElement>(null)
+
   // Modal registrar
-  const [showModal, setShowModal]     = useState(false)
-  const [insumos, setInsumos]         = useState<InsumoResponse[]>([])
-  const [tipo, setTipo]               = useState<TipoMovimiento>('entrada')
-  const [insumoId, setInsumoId]       = useState('')
-  const [cantidad, setCantidad]       = useState('')
-  const [motivo, setMotivo]           = useState('')
-  const [saving, setSaving]           = useState(false)
-  const [formError, setFormError]     = useState<string | null>(null)
-  const [toast, setToast]             = useState<string | null>(null)
+  const [showModal, setShowModal]   = useState(false)
+  const [insumos, setInsumos]       = useState<InsumoResponse[]>([])
+  const [tipo, setTipo]             = useState<TipoMovimiento>('entrada')
+  const [insumoId, setInsumoId]     = useState('')
+  const [cantidad, setCantidad]     = useState('')
+  const [motivo, setMotivo]         = useState('')
+  const [saving, setSaving]         = useState(false)
+  const [formError, setFormError]   = useState<string | null>(null)
+  const [toast, setToast]           = useState<string | null>(null)
 
   function showToast(msg: string) {
     setToast(msg); setTimeout(() => setToast(null), 3000)
   }
 
-  const load = useCallback(async (skip: number) => {
+  // Cierra el menu exportar al hacer click fuera
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const load = useCallback(async (skip: number, f: Filtros) => {
     setLoading(true)
     try {
+      const params: Record<string, string | number> = { skip, limit: PAGE_SIZE }
+      if (f.insumo)      params.insumo      = f.insumo
+      if (f.tipo !== 'todos') params.tipo   = f.tipo
+      if (f.fecha_desde) params.fecha_desde = f.fecha_desde
+      if (f.fecha_hasta) params.fecha_hasta = f.fecha_hasta
+
       const { data } = await api.get<PaginatedResponse<MovimientoEnriquecido>>(
-        '/movimientos/', { params: { skip, limit: PAGE_SIZE } }
+        '/movimientos/', { params }
       )
       setMovimientos(data.data); setTotal(data.total)
       setLastUpdated(new Date())
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load(page * PAGE_SIZE) }, [page, load])
+  useEffect(() => { load(page * PAGE_SIZE, filtros) }, [page, filtros, load])
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    const nuevos = { ...filtros, insumo: searchInput }
+    setFiltros(nuevos); setPage(0)
+  }
+
+  function setFiltro<K extends keyof Filtros>(key: K, value: Filtros[K]) {
+    setFiltros(f => ({ ...f, [key]: value })); setPage(0)
+  }
+
+  function limpiarFiltros() {
+    setFiltros(FILTROS_VACIOS); setSearchInput(''); setPage(0)
+  }
+
+  async function handleExportar(formato: 'csv' | 'xlsx') {
+    setExporting(true); setShowExportMenu(false)
+    try {
+      const params: Record<string, string> = { formato }
+      if (filtros.insumo)      params.insumo      = filtros.insumo
+      if (filtros.tipo !== 'todos') params.tipo   = filtros.tipo
+      if (filtros.fecha_desde) params.fecha_desde = filtros.fecha_desde
+      if (filtros.fecha_hasta) params.fecha_hasta = filtros.fecha_hasta
+
+      const res = await api.get('/movimientos/exportar', { params, responseType: 'blob' })
+      const ext  = formato === 'xlsx' ? 'xlsx' : 'csv'
+      const mime = formato === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv'
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }))
+      const a   = document.createElement('a')
+      a.href = url; a.download = `movimientos_hestia.${ext}`; a.click()
+      URL.revokeObjectURL(url)
+      showToast(`Exportado como ${ext.toUpperCase()}`)
+    } finally { setExporting(false) }
+  }
 
   async function abrirModal() {
     setTipo('entrada'); setInsumoId(''); setCantidad(''); setMotivo('')
@@ -94,7 +169,7 @@ export function Movimientos() {
       await api.post('/movimientos/', payload)
       showToast('Movimiento registrado correctamente')
       setShowModal(false)
-      load(0); setPage(0)
+      load(0, filtros); setPage(0)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
@@ -102,17 +177,14 @@ export function Movimientos() {
     } finally { setSaving(false) }
   }
 
-  // Filtro cliente: filtra los movimientos del listado actual por tipo
-  const visibles = filtro === 'todos'
-    ? movimientos
-    : movimientos.filter(m => m.tipo === filtro)
-
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   const inputCls = `w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm
     focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50 focus:bg-white
     placeholder:text-slate-400 transition-all`
   const labelCls = "block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5"
+  const dateCls  = `px-3 py-1.5 rounded-lg border border-slate-200 text-sm text-slate-600
+    bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 cursor-pointer`
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
@@ -128,46 +200,137 @@ export function Movimientos() {
         <div>
           <h1 className="text-2xl font-black text-slate-900">Movimientos</h1>
           <p className="text-slate-500 text-sm mt-0.5">
-            {total} movimientos registrados
+            {loading ? '...' : `${total} movimientos`}
+            {hasFilters && ' (filtrado)'}
           </p>
           {lastUpdated && (
             <p className="text-xs text-slate-400 mt-0.5">{formatAntiguedad(lastUpdated)}</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => { load(page * PAGE_SIZE) }}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => load(page * PAGE_SIZE, filtros)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
                        text-slate-500 hover:bg-slate-50 text-sm transition-colors">
             <RefreshCw size={14} /> Actualizar
           </button>
+
+          {/* Exportar dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setShowExportMenu(v => !v)}
+              disabled={exporting}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
+                         text-slate-600 hover:bg-slate-50 text-sm font-semibold
+                         transition-colors disabled:opacity-50">
+              <Download size={14} />
+              {exporting ? 'Exportando...' : 'Exportar'}
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200
+                              rounded-xl shadow-lg z-20 overflow-hidden min-w-36">
+                <button
+                  onClick={() => handleExportar('csv')}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm
+                             text-slate-700 hover:bg-slate-50 font-semibold">
+                  <FileText size={14} className="text-slate-400" /> CSV
+                </button>
+                <button
+                  onClick={() => handleExportar('xlsx')}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm
+                             text-slate-700 hover:bg-slate-50 font-semibold">
+                  <FileText size={14} className="text-teal-500" /> Excel (.xlsx)
+                </button>
+              </div>
+            )}
+          </div>
+
           {puedeRegistrar && (
             <button onClick={abrirModal}
               className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
                          font-bold px-4 py-2.5 rounded-xl text-sm transition-colors">
-              <Plus size={16} /> Registrar movimiento
+              <Plus size={16} /> Registrar
             </button>
           )}
         </div>
       </div>
 
-      {/* Filtros */}
-      <div className="flex gap-2 mb-5">
-        {(['todos', 'entrada', 'salida'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFiltro(f)}
-            className={`px-4 py-1.5 rounded-full text-sm font-bold transition-colors ${
-              filtro === f
-                ? 'bg-slate-900 text-white'
-                : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-            }`}
-          >
-            {f === 'todos' ? 'Todos' : f === 'entrada' ? 'Entradas' : 'Salidas'}
+      {/* Panel de filtros */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 mb-5">
+        {/* Busqueda por insumo */}
+        <form onSubmit={handleSearch} className="flex gap-2 mb-3">
+          <div className="relative flex-1">
+            <Search size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text" value={searchInput}
+              onChange={e => {
+                setSearchInput(e.target.value)
+                if (!e.target.value) setFiltro('insumo', '')
+              }}
+              placeholder="Buscar por nombre de insumo..."
+              className="w-full pl-9 pr-4 py-2 rounded-lg border border-slate-200 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-teal-500
+                         placeholder:text-slate-400"
+            />
+          </div>
+          <button type="submit"
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-700 text-white
+                       text-sm font-bold rounded-lg transition-colors">
+            Buscar
           </button>
-        ))}
+        </form>
+
+        {/* Tipo + fechas + limpiar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <SlidersHorizontal size={14} className="text-slate-400" />
+
+          {/* Pills de tipo */}
+          <div className="flex gap-1">
+            {(['todos', 'entrada', 'salida'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFiltro('tipo', f)}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${
+                  filtros.tipo === f
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                }`}
+              >
+                {f === 'todos' ? 'Todos' : f === 'entrada' ? 'Entradas' : 'Salidas'}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-semibold">Desde</span>
+            <input
+              type="date" value={filtros.fecha_desde}
+              onChange={e => setFiltro('fecha_desde', e.target.value)}
+              className={dateCls}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 font-semibold">Hasta</span>
+            <input
+              type="date" value={filtros.fecha_hasta}
+              onChange={e => setFiltro('fecha_hasta', e.target.value)}
+              className={dateCls}
+            />
+          </div>
+
+          {hasFilters && (
+            <button
+              onClick={limpiarFiltros}
+              className="flex items-center gap-1 text-xs font-bold text-rose-500
+                         hover:text-rose-700 transition-colors ml-auto">
+              <X size={12} /> Limpiar filtros
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Tabla con scroll horizontal en pantallas pequeñas */}
+      {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <thead>
@@ -184,12 +347,18 @@ export function Movimientos() {
           <tbody className="divide-y divide-slate-100">
             {loading ? (
               Array.from({ length: 10 }).map((_, i) => <TableRowSkeleton key={i} cols={7} />)
-            ) : visibles.length === 0 ? (
+            ) : movimientos.length === 0 ? (
               <tr><td colSpan={7} className="text-center py-16 text-slate-400">
                 <ArrowUpCircle size={32} className="mx-auto mb-2 opacity-30" />
                 <p className="font-semibold">Sin movimientos que mostrar</p>
+                {hasFilters && (
+                  <button onClick={limpiarFiltros}
+                    className="text-teal-600 text-xs mt-1 font-bold">
+                    Limpiar filtros
+                  </button>
+                )}
               </td></tr>
-            ) : visibles.map(m => (
+            ) : movimientos.map(m => (
               <tr key={m.id} className="hover:bg-slate-50 transition-colors">
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -249,7 +418,6 @@ export function Movimientos() {
       {showModal && (
         <Modal title="Registrar movimiento" onClose={() => setShowModal(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Tipo */}
             <div>
               <label className={labelCls}>Tipo *</label>
               <div className="grid grid-cols-2 gap-3">
@@ -275,8 +443,6 @@ export function Movimientos() {
                 ))}
               </div>
             </div>
-
-            {/* Insumo */}
             <div>
               <label className={labelCls}>Insumo *</label>
               <select required value={insumoId}
@@ -290,16 +456,12 @@ export function Movimientos() {
                 ))}
               </select>
             </div>
-
-            {/* Cantidad */}
             <div>
               <label className={labelCls}>Cantidad *</label>
               <input type="number" min="1" required value={cantidad}
                 onChange={e => setCantidad(e.target.value)}
                 className={inputCls} placeholder="0" />
             </div>
-
-            {/* Motivo */}
             <div>
               <label className={labelCls}>Motivo</label>
               <input type="text" value={motivo}
@@ -307,12 +469,10 @@ export function Movimientos() {
                 className={inputCls}
                 placeholder="Ej: Reposicion mensual, Uso en practica clinica..." />
             </div>
-
             {formError && (
               <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200
                             px-3 py-2 rounded-lg font-semibold">{formError}</p>
             )}
-
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setShowModal(false)}
                 className="flex-1 py-2.5 rounded-xl border border-slate-200
