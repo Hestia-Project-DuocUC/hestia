@@ -99,3 +99,15 @@ def limpiar(email: str) -> None:
     with _lock:
         _intentos.pop(clave, None)
         _bloqueados.pop(clave, None)
+
+
+def intentos_restantes(email: str) -> int:
+    """Devuelve cuantos intentos quedan antes del bloqueo.
+    Llamar despues de registrar_fallo().
+    """
+    clave = _clave(email)
+    ahora = datetime.utcnow()
+    with _lock:
+        ventana_inicio = ahora - timedelta(seconds=VENTANA_SEG)
+        recientes = [t for t in _intentos[clave] if t > ventana_inicio]
+        return max(0, MAX_INTENTOS - len(recientes))

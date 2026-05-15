@@ -8,6 +8,16 @@ import { AlertaCardSkeleton } from '../components/ui/Skeleton'
 type Tab = 'activas' | 'resueltas'
 const DIAS_OPTIONS = [7, 14, 30] as const
 
+function formatAntiguedad(fecha: Date): string {
+  const diff = Math.floor((Date.now() - fecha.getTime()) / 1000)
+  if (diff < 60) return 'Actualizado hace un momento'
+  if (diff < 3600) return `Actualizado hace ${Math.floor(diff / 60)} min`
+  return `Actualizado el ${fecha.toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })}`
+}
+
 export function Alertas() {
   const [tab, setTab]           = useState<Tab>('activas')
   const [dias, setDias]         = useState<number>(30)
@@ -16,6 +26,7 @@ export function Alertas() {
   const [resueltas, setResueltas] = useState<InsumoAlerta[]>([])
   const [loading, setLoading]   = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   // Re-ejecuta cuando cambia tab, dias o se presiona "Actualizar"
   useEffect(() => {
@@ -28,6 +39,7 @@ export function Alertas() {
       .then(({ data }) => {
         if (tab === 'activas') setActivas(data)
         else setResueltas(data)
+        setLastUpdated(new Date())
       })
       .finally(() => {
         setLoading(false)
@@ -58,6 +70,9 @@ export function Alertas() {
               ? 'Insumos con stock igual o por debajo del mínimo establecido.'
               : 'Insumos que superaron el mínimo y recibieron entradas recientemente.'}
           </p>
+          {lastUpdated && (
+            <p className="text-xs text-slate-400 mt-0.5">{formatAntiguedad(lastUpdated)}</p>
+          )}
         </div>
         <button
           onClick={refresh}

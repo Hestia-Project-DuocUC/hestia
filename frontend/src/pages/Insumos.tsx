@@ -16,6 +16,16 @@ import { Modal } from '../components/ui/Modal'
 
 const PAGE_SIZE = 15
 
+function formatAntiguedad(fecha: Date): string {
+  const diff = Math.floor((Date.now() - fecha.getTime()) / 1000)
+  if (diff < 60) return 'Actualizado hace un momento'
+  if (diff < 3600) return `Actualizado hace ${Math.floor(diff / 60)} min`
+  return `Actualizado el ${fecha.toLocaleString('es-CL', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
+  })}`
+}
+
 interface FormState {
   nombre: string; descripcion: string
   stock_actual: string; stock_minimo: string
@@ -70,6 +80,7 @@ export function Insumos() {
   const [deleting, setDeleting]             = useState(false)
   const [toast, setToast]                   = useState<string | null>(null)
   const [exporting, setExporting]           = useState(false)
+  const [lastUpdated, setLastUpdated]       = useState<Date | null>(null)
 
   function showToast(msg: string) {
     setToast(msg); setTimeout(() => setToast(null), 3000)
@@ -108,6 +119,7 @@ export function Insumos() {
       const { data } = await api.get<PaginatedResponse<InsumoResponse>>('/insumos/', { params })
       setInsumos(data.data)
       setTotal(data.total)
+      setLastUpdated(new Date())
     } finally { setLoading(false) }
   }, [])
 
@@ -254,6 +266,9 @@ export function Insumos() {
             {loading ? '...' : `${total} insumos`}
             {hasFilters && ' (filtrado)'}
           </p>
+          {lastUpdated && (
+            <p className="text-xs text-slate-400 mt-0.5">{formatAntiguedad(lastUpdated)}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

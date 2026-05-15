@@ -138,8 +138,11 @@ export function Login() {
                   />
                 </div>
                 {error && (
-                  <p className="text-rose-400 text-xs bg-rose-950 border border-rose-800
-                                px-3 py-2 rounded-lg font-semibold">{error}</p>
+                  <p className={`text-xs px-3 py-2 rounded-lg font-semibold ${
+                    error.includes('intento')
+                      ? 'text-amber-400 bg-amber-950 border border-amber-800'
+                      : 'text-rose-400 bg-rose-950 border border-rose-800'
+                  }`}>{error}</p>
                 )}
                 <button type="submit" disabled={loading} className={btnCls}>
                   {loading ? 'Verificando...' : 'Ingresar'}

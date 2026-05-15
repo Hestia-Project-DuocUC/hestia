@@ -17,7 +17,7 @@ from app.utils.security import (
     verificar_password, crear_token, crear_pre_token, verificar_token
 )
 from app.utils.deps import get_usuario_actual
-from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar
+from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar, intentos_restantes
 from app.utils.auditoria import registrar, get_ip
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
@@ -142,15 +142,25 @@ def login(
         form_data.password, usuario.password_hash
     ):
         registrar_fallo(form_data.username)
+        restantes = intentos_restantes(form_data.username)
         registrar(
             db, "LOGIN_FALLIDO",
             usuario=usuario,
             detalle=form_data.username,
             ip=get_ip(request),
         )
+        if restantes > 0:
+            s = 's' if restantes != 1 else ''
+            n = 'n' if restantes != 1 else ''
+            detail = (
+                f"Email o contrasena incorrectos. "
+                f"Te queda{n} {restantes} intento{s} antes del bloqueo."
+            )
+        else:
+            detail = "Email o contrasena incorrectos."
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Email o contrasena incorrectos",
+            detail=detail,
         )
 
     # Credenciales validas pero la cuenta esta desactivada (soft-deleted).
