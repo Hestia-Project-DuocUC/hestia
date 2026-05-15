@@ -5,28 +5,15 @@
 // No usamos CSS filter (brightness/invert) porque con PNG de fondo blanco
 // el filtro invierte TODO incluyendo el fondo, generando un recuadro negro.
 
-interface LogoProps {
-  className?: string
-  light?: boolean
-}
-
-export function Logo({ className = 'w-8 h-8', light = false }: LogoProps) {
+export function Logo({ className = 'w-32 h-32'}) {
   const img = (
     <img
-      src="/logo.png"
+      src="/logo_hestia_icon.ico"
       alt="Hestia"
       className={className}
       draggable={false}
     />
   )
-
-  if (light) {
-    return (
-      <div className="bg-white rounded-xl p-0.5 inline-flex items-center justify-center flex-shrink-0">
-        {img}
-      </div>
-    )
-  }
 
   return img
 }

@@ -48,7 +48,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-5 pt-7 pb-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <Logo className="w-9 h-9" light />
+          <Logo className="w-12 h-12"/>
           <div>
             <p className="text-white font-bold text-base leading-tight">Hestia</p>
             <p className="text-slate-400 text-xs">Escuela de Salud</p>

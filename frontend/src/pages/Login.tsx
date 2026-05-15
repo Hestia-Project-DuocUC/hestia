@@ -112,8 +112,8 @@ export function Login() {
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#134e4a22_0%,_transparent_60%)]" />
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 mb-4">
-            <Logo className="w-16 h-16" light />
+          <div className="inline-flex items-center justify-center w-32 h-32 mb-4">
+            <Logo className="w-32 h-32"/>
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">Hestia</h1>
           <p className="text-slate-400 text-sm mt-1">
