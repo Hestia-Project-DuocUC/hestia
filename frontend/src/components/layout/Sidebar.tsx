@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, AlertTriangle, Package,
   ArrowLeftRight, DoorOpen, Tag,
-  LogOut, User, ShieldCheck, Upload,
+  LogOut, ShieldCheck, Upload,
   UserCircle, Users, ScrollText
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
@@ -25,7 +25,7 @@ const NAV_ITEMS = [
 ]
 
 export function Sidebar() {
-  const { user, logout } = useAuthStore()
+  const { logout } = useAuthStore()
   const navigate = useNavigate()
 
   function handleLogout() { logout(); navigate('/login') }
@@ -39,6 +39,7 @@ export function Sidebar() {
     }
   `
 
+  const { user } = useAuthStore()
   const itemsVisibles = NAV_ITEMS.filter(
     item => user?.rol && item.roles.includes(user.rol)
   )
@@ -69,7 +70,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Pie: perfil, seguridad, usuario, logout */}
+      {/* Pie: perfil, seguridad, logout */}
       <div className="px-3 pb-5 border-t border-slate-800 pt-4 space-y-1">
         <NavLink to="/perfil" className={navLinkCls}>
           <UserCircle size={17} />
@@ -79,15 +80,6 @@ export function Sidebar() {
           <ShieldCheck size={17} />
           Seguridad
         </NavLink>
-        <div className="flex items-center gap-3 px-3 py-2.5 mt-1">
-          <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center">
-            <User size={14} className="text-slate-300" />
-          </div>
-          <div className="min-w-0">
-            <p className="text-white text-xs font-semibold truncate">{user?.nombre ?? 'Usuario'}</p>
-            <p className="text-slate-400 text-xs capitalize">{user?.rol}</p>
-          </div>
-        </div>
         <button onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400
                      hover:bg-slate-800 hover:text-rose-400 text-sm font-semibold
