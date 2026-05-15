@@ -59,9 +59,8 @@ def _build_query(db: Session,
 
 
 # ---------------------------------------------------------------------------
-# IMPORTANTE: rutas estaticas (/alertas, /alertas-resueltas, /exportar)
-# deben ir ANTES de la ruta dinamica /{insumo_id}, o FastAPI las interpreta
-# como un entero y devuelve 422 Unprocessable Entity.
+# IMPORTANTE: rutas estaticas deben ir ANTES de la ruta dinamica /{insumo_id},
+# o FastAPI las interpreta como un entero y devuelve 422.
 # ---------------------------------------------------------------------------
 
 @router.get("/alertas", response_model=list[InsumoAlerta])
@@ -98,19 +97,7 @@ def alertas_resueltas(
     usuario: Usuario = Depends(get_usuario_actual)
 ):
     """Insumos activos que YA superaron el stock minimo y ademas tuvieron al
-    menos una entrada en los ultimos `dias` dias.
-
-    Por que subquery y no JOIN:
-    Un JOIN con Movimiento duplicaria filas si un insumo tiene multiples
-    entradas en el periodo. La subquery devuelve insumo_ids unicos (DISTINCT),
-    y luego filtramos Insumo sobre esa lista: limpio y eficiente.
-
-    Por que timezone.utc:
-    Movimiento.fecha es DateTime(timezone=True) en PostgreSQL, lo que
-    almacena timestamps con offset. Comparar con datetime.utcnow() (naive)
-    puede causar errores en algunas versiones de SQLAlchemy/psycopg2.
-    datetime.now(timezone.utc) es timezone-aware y compatibe de forma segura.
-    """
+    menos una entrada en los ultimos `dias` dias."""
     desde = datetime.now(timezone.utc) - timedelta(days=dias)
 
     subq = (
@@ -158,10 +145,7 @@ def exportar_insumos(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual)
 ):
-    """Exporta el inventario como CSV con los mismos filtros del listado.
-    Por defecto solo incluye insumos activos. El archivo se abre directamente
-    en Excel gracias al BOM UTF-8.
-    """
+    """Exporta el inventario como CSV con los mismos filtros del listado."""
     insumos = _build_query(
         db, nombre, sala_id, categoria_id, bajo_stock, incluir_inactivos
     ).order_by(Insumo.nombre).all()
@@ -198,6 +182,35 @@ def exportar_insumos(
     )
 
 
+@router.get("/sugerencias", response_model=list[str])
+def sugerencias_insumos(
+    q: str,
+    limit: int = 8,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual),
+):
+    """Devuelve nombres de insumos activos que coinciden con `q`.
+
+    Usado por el componente SearchWithSuggestions del frontend para
+    mostrar un dropdown de autocompletado mientras el usuario escribe.
+    Requiere minimo 2 caracteres para evitar queries triviales.
+    Solo devuelve nombres (strings), no el objeto completo.
+    """
+    if len(q.strip()) < 2:
+        return []
+    resultados = (
+        db.query(Insumo.nombre)
+        .filter(
+            Insumo.activo.is_(True),
+            Insumo.nombre.ilike(f"%{q.strip()}%"),
+        )
+        .order_by(Insumo.nombre)
+        .limit(min(limit, 15))
+        .all()
+    )
+    return [r[0] for r in resultados]
+
+
 @router.get("/", response_model=PaginatedResponse[InsumoResponse])
 def listar_insumos(
     skip: int = 0,
@@ -210,12 +223,7 @@ def listar_insumos(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(get_usuario_actual)
 ):
-    """Lista insumos con filtros opcionales: nombre, sala, categoria,
-    bajo_stock, incluir_inactivos. Por defecto excluye desactivados.
-    """
-    q = _build_query(
-        db, nombre, sala_id, categoria_id, bajo_stock, incluir_inactivos
-    )
+    q = _build_query(db, nombre, sala_id, categoria_id, bajo_stock, incluir_inactivos)
     total = q.count()
     insumos = q.offset(skip).limit(limit).all()
     return {"total": total, "skip": skip, "limit": limit, "data": insumos}
@@ -254,9 +262,6 @@ def actualizar_insumo(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_operador)
 ):
-    """Actualiza campos del insumo. Operador puede editar todo excepto
-    'activo'; solo admin puede reactivar/desactivar via PUT. El cambio de
-    estado queda registrado en audit_log."""
     insumo = db.query(Insumo).filter(Insumo.id == insumo_id).first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
@@ -294,19 +299,7 @@ def eliminar_insumo(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_admin)
 ):
-    """Soft-delete: marca el insumo como inactivo (activo=false).
-
-    Antes este endpoint hacia DELETE fisico y fallaba con FK violation cuando
-    el insumo tenia movimientos asociados (movimientos.insumo_id es NOT NULL
-    sin ON DELETE policy). El resultado era un 500 sin JSON y el frontend
-    mostraba un generico 'Error al eliminar' sin detalle.
-
-    Ahora la fila se conserva: el insumo desaparece de listados, alertas y
-    exportaciones, pero el historial de movimientos sigue siendo trazable.
-    Reactivable via PUT /insumos/{id} con activo=true (solo admin).
-
-    Requiere rol admin + codigo TOTP valido (header x-totp-code).
-    """
+    """Soft-delete: marca el insumo como inactivo (activo=false)."""
     if not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
