@@ -26,6 +26,11 @@ class Usuario(Base):
         Boolean, default=True, nullable=False, server_default="true"
     )
 
+    # Foto de perfil almacenada como data URL base64 (data:image/<tipo>;base64,...).
+    # El frontend redimensiona a max 256x256 antes de enviar, por lo que el
+    # string resultante ocupa aprox. 30-80 KB. Nullable: usuarios sin foto.
+    avatar_b64 = Column(Text, nullable=True)
+
     # 2FA TOTP
     totp_secret = Column(String, nullable=True)
     totp_habilitado = Column(Boolean, default=False, nullable=False)

@@ -42,6 +42,12 @@ MIGRACIONES_IDEMPOTENTES = [
     "ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE",
     "ALTER TABLE IF EXISTS insumos "
     "ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT TRUE",
+    # avatar_b64: foto de perfil almacenada como data URL base64.
+    # El frontend redimensiona a max 256x256 antes de enviar (~30-80 KB).
+    # TEXT en Postgres no tiene limite practico de tamano; el backend
+    # valida que no supere 3 MB del string.
+    "ALTER TABLE IF EXISTS usuarios "
+    "ADD COLUMN IF NOT EXISTS avatar_b64 TEXT",
 ]
 
 

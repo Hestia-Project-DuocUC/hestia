@@ -5,7 +5,7 @@ import pyotp
 from app.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.usuario import (
-    UsuarioCreate, UsuarioUpdate, UsuarioResponse, CambiarPassword
+    UsuarioCreate, UsuarioUpdate, AvatarUpdate, UsuarioResponse, CambiarPassword
 )
 from app.schemas.comun import PaginatedResponse
 from app.utils.deps import get_usuario_actual, require_admin
@@ -15,6 +15,9 @@ from app.utils.auditoria import registrar, get_ip
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
 TOTP_VALID_WINDOW = 1
+
+# Limite de tamano del avatar como string base64 (~3 MB = ~2 MB imagen original).
+_AVATAR_MAX_LEN = 3_000_000
 
 
 @router.get("/", response_model=PaginatedResponse[UsuarioResponse])
@@ -53,6 +56,38 @@ def cambiar_password(
     usuario.password_hash = hashear_password(datos.password_nueva)
     db.commit()
     return {"mensaje": "Contrasena actualizada correctamente"}
+
+
+@router.put("/me/avatar", response_model=UsuarioResponse)
+def actualizar_avatar(
+    datos: AvatarUpdate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_usuario_actual),
+):
+    """Actualiza la foto de perfil del usuario autenticado.
+
+    Recibe un data URL base64 (data:image/<tipo>;base64,...). El frontend
+    se encarga de redimensionar la imagen a max 256x256 con Canvas antes
+    de enviarsela, por lo que el string deberia ser pequeno.
+
+    Validaciones:
+    - Debe comenzar con 'data:image/' para garantizar que es una imagen.
+    - No puede superar _AVATAR_MAX_LEN caracteres (~2 MB de imagen original).
+    """
+    if not datos.avatar_b64.startswith("data:image/"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Formato invalido. La imagen debe ser un data URL (data:image/...).",
+        )
+    if len(datos.avatar_b64) > _AVATAR_MAX_LEN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La imagen es demasiado grande. Maximo 2 MB.",
+        )
+    usuario.avatar_b64 = datos.avatar_b64
+    db.commit()
+    db.refresh(usuario)
+    return usuario
 
 
 @router.post("/", response_model=UsuarioResponse)

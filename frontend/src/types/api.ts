@@ -18,6 +18,7 @@ export interface UsuarioMe {
   rol: string
   totp_habilitado: boolean
   activo: boolean
+  avatar_b64: string | null
 }
 
 export interface Setup2FAResponse {

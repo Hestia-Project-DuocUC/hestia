@@ -27,6 +27,17 @@ class UsuarioUpdate(BaseModel):
     activo: Optional[bool] = None
 
 
+class AvatarUpdate(BaseModel):
+    """Actualiza la foto de perfil del usuario autenticado.
+
+    avatar_b64 debe ser un data URL completo: data:image/<tipo>;base64,...
+    El frontend redimensiona la imagen a max 256x256 con Canvas antes de
+    enviarla, por lo que el string resultante ocupa aprox. 30-80 KB.
+    El backend rechaza strings que superen 3 MB (~2 MB de imagen original).
+    """
+    avatar_b64: str
+
+
 class UsuarioResponse(BaseModel):
     id: int
     nombre: str
@@ -34,6 +45,7 @@ class UsuarioResponse(BaseModel):
     rol: RolUsuario
     totp_habilitado: bool = False
     activo: bool = True
+    avatar_b64: Optional[str] = None
 
     class Config:
         from_attributes = True
