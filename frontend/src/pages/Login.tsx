@@ -29,7 +29,10 @@ export function Login() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError(null)
+    // NO limpiamos el error aqui. Si habia un mensaje de "Te quedan N intentos",
+    // debe permanecer visible mientras vuela la nueva peticion. El error se limpia
+    // en onChange de los campos, que es el momento semanticamente correcto.
+    setLoading(true)
     try {
       const form = new URLSearchParams()
       form.append('username', email)
@@ -40,6 +43,7 @@ export function Login() {
       if (data.requires_2fa && data.pre_token) {
         setPreToken(data.pre_token)
         setModo2FA('totp')
+        setError(null)
       } else if (data.access_token) {
         setAuth(data.access_token, { nombre: data.usuario!, rol: data.rol! })
         navigate('/dashboard')
@@ -53,7 +57,7 @@ export function Login() {
 
   async function handleTotp(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError(null)
+    setLoading(true)
     try {
       const { data } = await api.post<LoginResponse>('/auth/2fa/completar-login', {
         pre_token: preToken, codigo: totp
@@ -71,7 +75,7 @@ export function Login() {
 
   async function handleRecovery(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError(null)
+    setLoading(true)
     try {
       const { data } = await api.post<LoginResponse>('/auth/2fa/recuperar-acceso', {
         pre_token: preToken, recovery_code: recovery
@@ -125,7 +129,7 @@ export function Login() {
                 <div>
                   <label className={labelCls}>Correo electronico</label>
                   <input type="email" value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    onChange={e => { setEmail(e.target.value); setError(null) }}
                     className={inputCls} placeholder="usuario@hestia.cl" required
                   />
                 </div>
@@ -133,7 +137,7 @@ export function Login() {
                   <label className={labelCls}>Contrasena</label>
                   <input
                     type="password" value={password}
-                    onChange={e => setPassword(e.target.value)}
+                    onChange={e => { setPassword(e.target.value); setError(null) }}
                     className={inputCls} placeholder="••••••••" required
                   />
                 </div>
