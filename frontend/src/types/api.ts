@@ -48,6 +48,22 @@ export interface DiaMovimiento {
   salidas: number
 }
 
+export interface ActividadReciente {
+  id: number
+  tipo: 'entrada' | 'salida'
+  insumo: string
+  sala: string | null
+  cantidad: number
+  usuario: string
+  fecha: string
+}
+
+export interface TopInsumo {
+  nombre: string
+  total_salidas: number
+  sala: string | null
+}
+
 export interface InsumoAlerta {
   id: number
   nombre: string
