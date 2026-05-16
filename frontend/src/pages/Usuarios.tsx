@@ -36,6 +36,29 @@ interface FormState {
 
 const FORM_INICIAL: FormState = { nombre: '', email: '', password: '', rol: 'visor' }
 
+/**
+ * Extrae un mensaje legible desde cualquier estructura de error de Axios.
+ *
+ * FastAPI puede devolver:
+ * - string: HTTPException { detail: "mensaje" }
+ * - array:  Pydantic 422 { detail: [{loc, msg, type}, ...] }
+ *
+ * En ambos casos devolvemos algo que se pueda mostrar en la UI.
+ */
+function extraerMensajeError(err: unknown, fallback: string): string {
+  const detail = (err as { response?: { data?: { detail?: unknown } } })
+    ?.response?.data?.detail
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const primero = detail[0] as { msg?: string; loc?: string[] }
+    const campo = primero.loc?.slice(-1)[0] ?? ''
+    const msg = primero.msg ?? ''
+    return campo ? `${campo}: ${msg}` : msg || fallback
+  }
+  return fallback
+}
+
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState<UsuarioMe[]>([])
   const [total, setTotal] = useState(0)
@@ -102,10 +125,10 @@ export function Usuarios() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setFormError(null)
     if (!editTarget && form.password.length < 8) {
-      setFormError('La contrasena debe tener al menos 8 caracteres.'); return
+      setFormError('La contraseña debe tener al menos 8 caracteres.'); return
     }
     if (editTarget && form.password && form.password.length < 8) {
-      setFormError('La contrasena nueva debe tener al menos 8 caracteres.'); return
+      setFormError('La contraseña nueva debe tener al menos 8 caracteres.'); return
     }
     setSaving(true)
     try {
@@ -125,9 +148,7 @@ export function Usuarios() {
       }
       cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })
-        .response?.data?.detail
-      setFormError(msg ?? 'Error al guardar. Intenta de nuevo.')
+      setFormError(extraerMensajeError(err, 'Error al guardar. Intenta de nuevo.'))
     } finally { setSaving(false) }
   }
 
@@ -141,9 +162,7 @@ export function Usuarios() {
       showToast(`${delTarget.nombre} desactivado`)
       cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail
-      setFormError(typeof detail === 'string' ? detail : 'Error al desactivar.')
+      setFormError(extraerMensajeError(err, 'Error al desactivar.'))
     } finally { setDeleting(false) }
   }
 
@@ -160,14 +179,12 @@ export function Usuarios() {
       showToast(`${reactivarTarget.nombre} reactivado`)
       cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const detail = (err as any)?.response?.data?.detail
-      setFormError(typeof detail === 'string' ? detail : 'Error al reactivar.')
+      setFormError(extraerMensajeError(err, 'Error al reactivar.'))
     } finally { setDeleting(false) }
   }
 
   async function handleReset2FA(u: UsuarioMe) {
-    if (!confirm(`¿Desactivar el 2FA de ${u.nombre}? Tendra que configurarlo de nuevo.`)) return
+    if (!confirm(`¿Desactivar el 2FA de ${u.nombre}? Tendrá que configurarlo de nuevo.`)) return
     try {
       await api.post(`/usuarios/${u.id}/reset-2fa`)
       showToast(`2FA desactivado para ${u.nombre}`)
@@ -304,7 +321,7 @@ export function Usuarios() {
 
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="px-3 py-1 text-xs rounded-lg border border-slate-200
@@ -332,7 +349,7 @@ export function Usuarios() {
               </label>
               <input type="text" name="nombre" required value={form.nombre}
                 onChange={handleField} className={inputCls}
-                placeholder="Ej: Maria González" autoFocus />
+                placeholder="Ej: María González" autoFocus />
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
@@ -344,18 +361,18 @@ export function Usuarios() {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide mb-1.5">
-                {editTarget ? 'Nueva contrasena' : 'Contrasena *'}
+                {editTarget ? 'Nueva contraseña' : 'Contraseña *'}
               </label>
               <input type="password" name="password"
                 required={!editTarget}
                 value={form.password}
                 onChange={handleField}
                 className={inputCls}
-                placeholder={editTarget ? 'Dejar vacio para no cambiar' : 'Minimo 8 caracteres'}
+                placeholder={editTarget ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
                 autoComplete="new-password" />
               {editTarget && (
                 <p className="text-xs text-slate-400 mt-1">
-                  Si no escribes nada, la contrasena actual se conserva.
+                  Si no escribes nada, la contraseña actual se conserva.
                 </p>
               )}
             </div>
@@ -404,8 +421,8 @@ export function Usuarios() {
               </div>
               <p className="font-bold text-slate-900 mb-1">¿Desactivar este usuario?</p>
               <p className="text-slate-500 text-sm mb-3">
-                <strong>{delTarget.nombre}</strong> ({delTarget.email}) no podra
-                iniciar sesion. Su historial se conserva y puede reactivarse cuando quieras.
+                <strong>{delTarget.nombre}</strong> ({delTarget.email}) no podrá
+                iniciar sesión. Su historial se conserva y puede reactivarse cuando quieras.
               </p>
               {userHas2FA === false ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
@@ -414,7 +431,7 @@ export function Usuarios() {
                     <div>
                       <p className="text-amber-800 font-bold text-xs">2FA requerido</p>
                       <p className="text-amber-700 text-xs mt-0.5">
-                        Activa la verificacion en dos pasos para desactivar usuarios.
+                        Activa la verificación en dos pasos para desactivar usuarios.
                       </p>
                     </div>
                   </div>
@@ -428,7 +445,7 @@ export function Usuarios() {
               ) : (
                 <>
                   <p className="text-slate-400 text-xs mb-5">
-                    Necesitaras tu codigo TOTP para confirmar.
+                    Necesitarás tu código TOTP para confirmar.
                   </p>
                   {formError && (
                     <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200
@@ -448,7 +465,7 @@ export function Usuarios() {
           ) : (
             <div>
               <p className="text-slate-600 text-sm mb-5 text-center">
-                Ingresa tu codigo TOTP para confirmar la desactivacion de
+                Ingresa tu código TOTP para confirmar la desactivación de
                 <strong> {delTarget.nombre}</strong>.
               </p>
               <input
@@ -493,7 +510,7 @@ export function Usuarios() {
             <p className="font-bold text-slate-900 mb-1">¿Reactivar este usuario?</p>
             <p className="text-slate-500 text-sm mb-5">
               <strong>{reactivarTarget.nombre}</strong> ({reactivarTarget.email})
-              podra volver a iniciar sesion con sus credenciales actuales.
+              podrá volver a iniciar sesión con sus credenciales actuales.
             </p>
             {formError && (
               <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200

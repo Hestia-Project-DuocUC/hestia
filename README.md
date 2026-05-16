@@ -2,7 +2,7 @@
 
 **Sistema de gestión de insumos médicos — Escuela de Salud DuocUC**
 
-Hestia es una aplicación web para el control de stock de insumos e implementos en las salas clínicas de la Escuela de Salud de DuocUC, sede San Bernardo. Desarrollado por estudiantes de Informática Biomédica como proyecto de titulo y para una posterior posible implementación en ayuda de los estudiantes de la misma Escuela.
+Hestia es una aplicación web para el control de stock de insumos e implementos en las salas clínicas de la Escuela de Salud de DuocUC, sede San Bernardo. Desarrollado por estudiantes de Informática Biomédica como proyecto de título y para una posterior posible implementación en ayuda de los estudiantes de la misma Escuela.
 
 ---
 
@@ -22,15 +22,29 @@ Hestia es una aplicación web para el control de stock de insumos e implementos 
 ## Funcionalidades
 
 - **Inventario** — CRUD de insumos con filtros por nombre, sala, categoría y estado de stock
-- **Movimientos** — registro de entradas y salidas con trazabilidad por usuario
+- **Movimientos** — registro de entradas y salidas con trazabilidad por usuario; exportación CSV/XLSX con filtros
 - **Alertas de stock** — insumos bajo mínimo y alertas resueltas con rango configurable
-- **Dashboard** — métricas en tiempo real, gráfico semanal de actividad y estado del inventario
+- **Dashboard** — métricas en tiempo real, gráfico semanal, feed de actividad reciente y top insumos retirados
+- **Solicitudes de retiro** — flujo de retiro para docentes: carrito de insumos por clase y sala; bandeja de gestión para operadores con indicadores de urgencia
 - **Importación masiva** — carga de insumos desde CSV o XLSX con verificación TOTP
 - **Exportación CSV** — descarga del inventario con los filtros activos
-- **Gestión de usuarios** — CRUD desde la UI con roles admin / operador / visor
+- **Gestión de usuarios** — CRUD desde la UI con roles admin / operador / visor / docente
+- **Foto de perfil** — upload con redimensionado automático a 256×256
 - **2FA** — setup wizard con códigos QR, códigos de recuperación y reset desde admin
-- **Audit log** — historial de acciones con filtros por tipo y usuario
+- **Soft-delete** — usuarios e insumos se desactivan sin perder trazabilidad histórica
+- **Audit log** — historial completo de acciones con filtros
 - **Seguridad** — rate limiting en login, security headers HTTP, BD no expuesta a la LAN
+
+---
+
+## Roles de usuario
+
+| Rol | Acceso |
+|---|---|
+| `admin` | Acceso completo — gestión de usuarios, insumos, importar, audit log |
+| `operador` | Insumos, movimientos, alertas, salas, categorías, bandeja de solicitudes |
+| `visor` | Solo lectura — dashboard, insumos, movimientos, alertas, salas, categorías |
+| `docente` | Exclusivo — carrito de retiro de insumos para su clase + historial propio |
 
 ---
 
@@ -74,7 +88,7 @@ Esto levanta los tres servicios en orden:
 | API (FastAPI) | http://localhost:8000 |
 | Docs interactivos | http://localhost:8000/docs |
 
-La base de datos se crea automáticamente al iniciar la API.
+La base de datos se crea automáticamente al iniciar la API. Las migraciones de esquema (columnas nuevas, valores de enum) se aplican de forma idempotente en cada arranque — no se pierden datos.
 
 ### 4. Cargar datos de demo (opcional)
 
@@ -96,6 +110,8 @@ El script pide confirmación antes de borrar datos existentes y muestra las cred
 | `amartinez@hestia.duoc.cl` | `Visor2024!` | Visor |
 | `lperez@hestia.duoc.cl` | `Visor2024!` | Visor |
 
+> Los usuarios con rol **docente** se crean desde la sección Usuarios (admin). No hay docentes de demo precargados.
+
 ---
 
 ## Comandos útiles
@@ -103,7 +119,7 @@ El script pide confirmación antes de borrar datos existentes y muestra las cred
 ```bash
 # Ciclo de vida
 docker compose up                  # levantar sin reconstruir
-docker compose up --build          # reconstruir imágenes y levantar
+docker compose up --build          # reconstruir imágenes y levantar  ← usar tras git pull
 docker compose down                # apagar (los datos persisten)
 docker compose down -v             # apagar y borrar la base de datos
 
@@ -115,6 +131,10 @@ docker compose restart frontend    # tras cambios en vite.config.ts
 docker compose logs -f api
 docker compose logs -f frontend
 ```
+
+> **Importante:** después de un `git pull` que incluya cambios en el backend, usar siempre
+> `docker compose up --build` para que los contenedores reflejen el código nuevo.
+> `docker compose restart api` solo reinicia el proceso, no reconstruye la imagen.
 
 ---
 
@@ -142,17 +162,22 @@ Y reconstruir el contenedor: `docker compose up --build frontend`.
 hestia/
 ├── backend/
 │   ├── app/
-│   │   ├── models/        → SQLAlchemy (usuario, insumo, sala, categoria, movimiento, audit_log)
+│   │   ├── models/        → SQLAlchemy (usuario, insumo, sala, categoria,
+│   │   │                               movimiento, solicitud, audit_log)
 │   │   ├── schemas/       → Pydantic v2
 │   │   ├── routes/        → FastAPI routers
 │   │   └── utils/         → security, deps (RBAC), rate_limit, auditoria
+│   ├── crear_admin.py     → bootstrap del usuario admin al arrancar
 │   ├── seed_demo.py       → cargador de datos de demo
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/         → Dashboard, Insumos, Alertas, Movimientos, Usuarios, AuditLog …
-│   │   ├── components/    → Layout, Sidebar, ui/ (Badge, Card, Modal, Skeleton, Logo)
+│   │   ├── pages/         → Dashboard, Insumos, Alertas, Movimientos,
+│   │   │                    Usuarios, SolicitudDocente, SolicitudOperador,
+│   │   │                    Perfil, Configuracion2FA, AuditLog, Importar…
+│   │   ├── components/    → Layout, Sidebar, ui/ (Badge, Card, Modal,
+│   │   │                    Skeleton, SearchSuggestions, Logo)
 │   │   ├── api/           → Axios client con interceptor JWT
 │   │   ├── store/         → Zustand (auth)
 │   │   └── types/         → interfaces TypeScript sincronizadas con el backend
