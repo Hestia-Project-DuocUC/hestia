@@ -9,6 +9,16 @@ from app.models.sala import Sala
 from app.models.categoria import Categoria
 from app.models.insumo import Insumo
 from app.models.movimiento import Movimiento
+# IMPORTANTE: todos los modelos deben importarse antes de create_all() y
+# antes de cualquier consulta ORM. SQLAlchemy resuelve las relaciones entre
+# modelos (relationship()) usando el mapper registry: si un modelo no fue
+# importado, la resolucion falla con KeyError al intentar usar otro modelo
+# que tiene una relacion apuntando al que falta.
+# solicitud define SolicitudRetiro, que Usuario referencia via
+# relationship("SolicitudRetiro", ...). Sin este import, db.query(Usuario)
+# falla con InvalidRequestError al intentar configurar el mapper.
+from app.models import solicitud  # noqa  <- SolicitudRetiro y SolicitudItem
+from app.models import audit_log  # noqa  <- AuditLog
 
 # --- Leer credenciales desde el entorno, sin defaults ---
 # Si alguna variable falta, el script falla con un mensaje claro.
@@ -21,16 +31,14 @@ if not admin_email or not admin_password:
     print("        Copia backend/.env.example a backend/.env y completa los valores.")
     sys.exit(1)
 
-# 1) Crear tablas que no existen (basado en los modelos SQLAlchemy actuales)
+# 1) Crear tablas que no existen (basado en los modelos SQLAlchemy actuales).
+#    create_all() necesita conocer TODOS los modelos registrados para crear
+#    las tablas con las relaciones correctas. Por eso los imports de arriba
+#    deben ir antes de esta llamada.
 Base.metadata.create_all(bind=engine)
 
-# 2) Aplicar migraciones idempotentes (ALTER TABLE para columnas nuevas en
-#    tablas ya existentes). Es seguro llamarlo aqui aunque uvicorn lo llame
-#    de nuevo despues: cada ALTER TABLE IF EXISTS ... ADD COLUMN IF NOT EXISTS
-#    no hace nada si la columna ya existe.
-#    Sin este paso, en una BD nueva este script crea la tabla y luego intenta
-#    consultarla con el ORM, que ya incluye las columnas nuevas en el SELECT,
-#    causando un error de "columna no existe".
+# 2) Aplicar migraciones idempotentes (columnas nuevas en tablas existentes
+#    y valores nuevos en tipos ENUM). Seguro de llamar multiples veces.
 aplicar_migraciones_pendientes()
 
 db = SessionLocal()
