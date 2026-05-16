@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import asc
-from datetime import datetime, timezone
+from sqlalchemy import asc, func
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+
 
 from app.database import get_db
 from app.models.solicitud import SolicitudRetiro, SolicitudItem, EstadoSolicitud
@@ -77,7 +78,40 @@ def _construir_response(s: SolicitudRetiro) -> SolicitudResponse:
 # ---------------------------------------------------------------------------
 # IMPORTANTE: rutas estaticas (/mis-solicitudes) van ANTES que las dinamicas
 # (/{solicitud_id}) aunque int != str — buena practica preventiva.
+
+# Se añade otra ruta estatica (/resumen-recientes) para el pop-up de bienvenida del operador, que muestra un resumen de las solicitudes recientes.
 # ---------------------------------------------------------------------------
+
+@router.get("/resumen-recientes")
+def resumen_solicitudes_recientes(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(require_operador),
+):
+    """Devuelve el conteo de solicitudes creadas desde el inicio del dia anterior.
+
+    Usado por el pop-up de bienvenida del operador al iniciar sesion.
+    Solo accesible para operador y admin.
+    """
+    inicio_ayer = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) - timedelta(days=1)
+
+    total = (
+        db.query(func.count(SolicitudRetiro.id))
+        .filter(SolicitudRetiro.fecha_creacion >= inicio_ayer)
+        .scalar()
+    ) or 0
+
+    pendientes = (
+        db.query(func.count(SolicitudRetiro.id))
+        .filter(
+            SolicitudRetiro.fecha_creacion >= inicio_ayer,
+            SolicitudRetiro.estado == EstadoSolicitud.pendiente,
+        )
+        .scalar()
+    ) or 0
+
+    return {"total": total, "pendientes": pendientes}
 
 @router.get("/mis-solicitudes", response_model=list[SolicitudResponse])
 def mis_solicitudes(

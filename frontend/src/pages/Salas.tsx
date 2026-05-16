@@ -131,7 +131,7 @@ export function Salas() {
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Nombre</th>
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Tipo</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Descripcion</th>
+              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Descripción</th>
               {puedeEscribir && (
                 <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Acciones</th>
               )}
@@ -188,7 +188,7 @@ export function Salas() {
         </table>
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="px-3 py-1 text-xs rounded-lg border border-slate-200
@@ -210,16 +210,16 @@ export function Salas() {
               <label className={labelCls}>Nombre *</label>
               <input type="text" required value={form.nombre}
                 onChange={e => setField('nombre', e.target.value)}
-                className={inputCls} placeholder="Ej: Laboratorio Clinico" />
+                className={inputCls} placeholder="Ej: Laboratorio Clínico" />
             </div>
             <div>
               <label className={labelCls}>Tipo</label>
               <input type="text" value={form.tipo}
                 onChange={e => setField('tipo', e.target.value)}
-                className={inputCls} placeholder="Ej: Laboratorio, Clinica, Bodega" />
+                className={inputCls} placeholder="Ej: Laboratorio, Clínica, Bodega" />
             </div>
             <div>
-              <label className={labelCls}>Descripcion</label>
+              <label className={labelCls}>Descripción</label>
               <input type="text" value={form.descripcion}
                 onChange={e => setField('descripcion', e.target.value)}
                 className={inputCls} placeholder="Opcional" />
@@ -252,7 +252,7 @@ export function Salas() {
             </div>
             <p className="font-bold text-slate-900 mb-1">¿Eliminar esta sala?</p>
             <p className="text-slate-500 text-sm mb-6">
-              <strong>{delTarget.nombre}</strong> sera eliminada permanentemente.
+              <strong>{delTarget.nombre}</strong> será eliminada permanentemente.
             </p>
             {formError && (
               <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200

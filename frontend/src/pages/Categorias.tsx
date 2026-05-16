@@ -159,7 +159,7 @@ export function Categorias() {
         </table>
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="px-3 py-1 text-xs rounded-lg border border-slate-200
@@ -183,7 +183,7 @@ export function Categorias() {
               </label>
               <input type="text" required value={nombre}
                 onChange={e => { setNombre(e.target.value); setFormError(null) }}
-                className={inputCls} placeholder="Ej: Proteccion personal" autoFocus />
+                className={inputCls} placeholder="Ej: Protección personal" autoFocus />
             </div>
             {formError && (
               <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200
@@ -213,7 +213,7 @@ export function Categorias() {
             </div>
             <p className="font-bold text-slate-900 mb-1">¿Eliminar esta categoria?</p>
             <p className="text-slate-500 text-sm mb-6">
-              <strong>{delTarget.nombre}</strong> sera eliminada permanentemente.
+              <strong>{delTarget.nombre}</strong> será eliminada permanentemente.
             </p>
             {formError && (
               <p className="text-rose-600 text-xs bg-rose-50 border border-rose-200

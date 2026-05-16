@@ -272,7 +272,7 @@ export function Insumos() {
             <input type="checkbox" checked={bajoStock}
               onChange={e => { setBajoStock(e.target.checked); setPage(0) }}
               className="w-4 h-4 rounded accent-teal-600" />
-            <span className="text-sm font-semibold text-slate-600">Solo bajo stock</span>
+            <span className="text-sm font-semibold text-slate-600">Sólo bajo stock</span>
           </label>
           {puedeEliminar && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -298,9 +298,9 @@ export function Insumos() {
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50">
               <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Nombre</th>
-              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Descripcion</th>
+              <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Descripción</th>
               <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Stock</th>
-              <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Minimo</th>
+              <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Mínimo</th>
               <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Estado</th>
               {puedeEscribir && (
                 <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Acciones</th>
@@ -379,7 +379,7 @@ export function Insumos() {
 
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex items-center gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="p-1.5 rounded-lg hover:bg-slate-100 disabled:opacity-40">
@@ -406,7 +406,7 @@ export function Insumos() {
                 className={inputCls} placeholder="Ej: Guantes de nitrilo talla M" />
             </div>
             <div>
-              <label className={labelCls}>Descripcion</label>
+              <label className={labelCls}>Descripción</label>
               <input type="text" value={form.descripcion}
                 onChange={e => setField('descripcion', e.target.value)}
                 className={inputCls} placeholder="Opcional" />
@@ -418,7 +418,7 @@ export function Insumos() {
                   onChange={e => setField('stock_actual', e.target.value)} className={inputCls} />
               </div>
               <div>
-                <label className={labelCls}>Stock minimo *</label>
+                <label className={labelCls}>Stock mínimo *</label>
                 <input type="number" min="0" required value={form.stock_minimo}
                   onChange={e => setField('stock_minimo', e.target.value)} className={inputCls} />
               </div>

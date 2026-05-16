@@ -334,7 +334,7 @@ export function Movimientos() {
 
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="px-3 py-1 text-xs rounded-lg border border-slate-200

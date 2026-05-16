@@ -24,11 +24,19 @@ const NAV_ITEMS = [
   // Seccion administracion
   { to: '/usuarios',    icon: Users,           label: 'Usuarios',    roles: ['admin'], divider: true },
   { to: '/audit-log',   icon: ScrollText,      label: 'Audit Log',   roles: ['admin'] },
-  // Flujo docente: solo retiro de insumos
+  // Flujo docente: retiro de insumos y insumos
   { to: '/solicitudes', icon: ClipboardList,   label: 'Retiro de insumos', roles: ['docente'] },
+  { to: '/insumos',     icon: Package,         label: 'Insumos', roles: ['docente'] },
   // Operador/admin tambien gestiona solicitudes (Bloque 4)
   { to: '/solicitudes', icon: ClipboardList,   label: 'Solicitudes', roles: ['operador'], divider: true },
 ]
+
+const ROL_LABELS: Record<string, string> = {
+  admin: 'Administrador',
+  operador: 'Operador',
+  visor: 'Visor',
+  docente: 'Docente',
+}
 
 export function Sidebar() {
   const { logout, user } = useAuthStore()
@@ -49,6 +57,8 @@ export function Sidebar() {
     item => user?.rol && item.roles.includes(user.rol)
   )
 
+  const rolLabel = user?.rol ? (ROL_LABELS[user.rol] ?? user.rol) : 'Escuela de Salud'
+
   return (
     <aside className="w-60 h-full bg-slate-900 flex flex-col border-r border-slate-800 flex-shrink-0">
       {/* Logo */}
@@ -57,9 +67,7 @@ export function Sidebar() {
           <Logo className="w-12 h-12" />
           <div>
             <p className="text-white font-bold text-base leading-tight">Hestia</p>
-            <p className="text-slate-400 text-xs">
-              {user?.rol === 'docente' ? 'Docente' : 'Escuela de Salud'}
-            </p>
+            <p className="text-slate-400 text-xs">{rolLabel}</p>
           </div>
         </div>
       </div>
@@ -93,7 +101,7 @@ export function Sidebar() {
                      hover:bg-slate-800 hover:text-rose-400 text-sm font-semibold
                      transition-colors duration-150"
         >
-          <LogOut size={17} /> Cerrar sesion
+          <LogOut size={17} /> Cerrar sesión
         </button>
       </div>
     </aside>

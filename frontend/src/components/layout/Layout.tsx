@@ -1,36 +1,54 @@
-import { Outlet, Navigate } from 'react-router-dom'
+import { Outlet, Navigate, useNavigate } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { useAuthStore } from '../../store/auth'
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { ShieldAlert, X } from 'lucide-react'
+import { ShieldAlert, ClipboardList, X, ArrowRight } from 'lucide-react'
 import { api } from '../../api/client'
 import type { UsuarioMe } from '../../types/api'
 
-const SESSION_KEY = 'hestia_2fa_warning_dismissed'
-
 export function Layout() {
   const token    = useAuthStore((s) => s.token)
+  const user     = useAuthStore((s) => s.user)
   const navigate = useNavigate()
+
   const [show2FAWarning, setShow2FAWarning] = useState(false)
+  const [showSolicitudesPopup, setShowSolicitudesPopup] = useState(false)
+  const [solicitudesTotal, setSolicitudesTotal] = useState(0)
+  const [solicitudesPendientes, setSolicitudesPendientes] = useState(0)
 
   useEffect(() => {
     if (!token) return
-    // Si ya fue descartado en esta sesion, no mostrar de nuevo
-    if (sessionStorage.getItem(SESSION_KEY)) return
+
+    // Pop-up 2FA: aparece siempre que totp_habilitado sea false,
+    // sin importar si el usuario ya lo descarto antes (no usa sessionStorage).
     api.get<UsuarioMe>('/usuarios/me').then(({ data }) => {
       if (!data.totp_habilitado) setShow2FAWarning(true)
     }).catch(() => {})
+
+    // Pop-up solicitudes: solo para operador, en cada inicio de sesion.
+    if (user?.rol === 'operador') {
+      api.get<{ total: number; pendientes: number }>('/solicitudes/resumen-recientes')
+        .then(({ data }) => {
+          setSolicitudesTotal(data.total)
+          setSolicitudesPendientes(data.pendientes)
+          setShowSolicitudesPopup(true)
+        })
+        .catch(() => {})
+    }
   }, [token])
 
-  function dismissWarning() {
-    sessionStorage.setItem(SESSION_KEY, '1')
-    setShow2FAWarning(false)
-  }
+  function dismiss2FA() { setShow2FAWarning(false) }
 
   function goToSecurity() {
-    dismissWarning()
+    dismiss2FA()
     navigate('/seguridad')
+  }
+
+  function dismissSolicitudes() { setShowSolicitudesPopup(false) }
+
+  function goToSolicitudes() {
+    dismissSolicitudes()
+    navigate('/solicitudes')
   }
 
   if (!token) return <Navigate to="/login" replace />
@@ -42,7 +60,61 @@ export function Layout() {
         <Outlet />
       </main>
 
-      {/* Popup de advertencia 2FA — aparece una vez por sesion si no esta activo */}
+      {/* Pop-up solicitudes recientes — operador/admin en cada inicio de sesion */}
+      {showSolicitudesPopup && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center
+                        justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-7">
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 bg-teal-100 rounded-xl flex items-center
+                              justify-center flex-shrink-0">
+                <ClipboardList size={24} className="text-teal-600" />
+              </div>
+              <button
+                onClick={dismissSolicitudes}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
+                           justify-center text-slate-400 hover:text-slate-600"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <h2 className="text-lg font-black text-slate-900 mb-2">
+              Solicitudes pendientes
+            </h2>
+            <p className="text-slate-500 text-sm mb-5">
+              Desde ayer se han recibido nuevas solicitudes de retiro de insumos.
+            </p>
+            <div className="flex gap-3 mb-6">
+              <div className="flex-1 bg-slate-50 rounded-xl p-4 text-center">
+                <p className="text-3xl font-black text-slate-900">{solicitudesTotal}</p>
+                <p className="text-xs text-slate-500 font-semibold mt-1">Total recibidas</p>
+              </div>
+              <div className="flex-1 bg-amber-50 rounded-xl p-4 text-center">
+                <p className="text-3xl font-black text-amber-600">{solicitudesPendientes}</p>
+                <p className="text-xs text-amber-600 font-semibold mt-1">Sin atender</p>
+              </div>
+            </div>
+            <button
+              onClick={goToSolicitudes}
+              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold
+                         py-2.5 rounded-xl transition-colors flex items-center
+                         justify-center gap-2 mb-2"
+            >
+              Ver solicitudes
+              <ArrowRight size={16} />
+            </button>
+            <button
+              onClick={dismissSolicitudes}
+              className="w-full py-2 text-sm text-slate-400 hover:text-slate-600
+                         font-semibold transition-colors"
+            >
+              Revisar después
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pop-up 2FA — aparece siempre que totp_habilitado sea false */}
       {show2FAWarning && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center
                         justify-center z-50 p-4">
@@ -53,7 +125,7 @@ export function Layout() {
                 <ShieldAlert size={24} className="text-amber-600" />
               </div>
               <button
-                onClick={dismissWarning}
+                onClick={dismiss2FA}
                 className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center
                            justify-center text-slate-400 hover:text-slate-600"
               >
@@ -61,10 +133,10 @@ export function Layout() {
               </button>
             </div>
             <h2 className="text-lg font-black text-slate-900 mb-2">
-              Activa la verificacion en dos pasos
+              Activa la verificación en dos pasos
             </h2>
             <p className="text-slate-500 text-sm mb-4">
-              Sin el 2FA activo, algunas funciones criticas no estaran disponibles:
+              Sin el 2FA activo, algunas funciones criticas no estarán disponibles:
             </p>
             <ul className="space-y-2 mb-6">
               {[
@@ -89,11 +161,11 @@ export function Layout() {
               Configurar 2FA ahora
             </button>
             <button
-              onClick={dismissWarning}
+              onClick={dismiss2FA}
               className="w-full py-2 text-sm text-slate-400 hover:text-slate-600
                          font-semibold transition-colors"
             >
-              Recordar mas tarde
+              Recordar más tarde
             </button>
           </div>
         </div>
