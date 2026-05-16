@@ -10,19 +10,21 @@ import { Modal } from '../components/ui/Modal'
 import { Badge } from '../components/ui/Badge'
 
 const PAGE_SIZE = 20
-const ROLES = ['admin', 'operador', 'visor'] as const
+const ROLES = ['admin', 'operador', 'visor', 'docente'] as const
 type Rol = typeof ROLES[number]
 
 const ROL_LABEL: Record<Rol, string> = {
   admin: 'Administrador',
   operador: 'Operador',
   visor: 'Visor',
+  docente: 'Docente',
 }
 
-const ROL_VARIANT: Record<Rol, 'danger' | 'warning' | 'info'> = {
+const ROL_VARIANT: Record<Rol, 'danger' | 'warning' | 'info' | 'success'> = {
   admin: 'danger',
   operador: 'warning',
   visor: 'info',
+  docente: 'success',
 }
 
 interface FormState {
@@ -35,23 +37,23 @@ interface FormState {
 const FORM_INICIAL: FormState = { nombre: '', email: '', password: '', rol: 'visor' }
 
 export function Usuarios() {
-  const [usuarios, setUsuarios]           = useState<UsuarioMe[]>([])
-  const [total, setTotal]                 = useState(0)
-  const [page, setPage]                   = useState(0)
-  const [loading, setLoading]             = useState(true)
-  const [mostrarInactivos, setMostrar]    = useState(false)
-  const [showCrear, setShowCrear]         = useState(false)
-  const [editTarget, setEditTarget]       = useState<UsuarioMe | null>(null)
-  const [delTarget, setDelTarget]         = useState<UsuarioMe | null>(null)
-  const [reactivarTarget, setReactivar]   = useState<UsuarioMe | null>(null)
-  const [form, setForm]                   = useState<FormState>(FORM_INICIAL)
-  const [saving, setSaving]               = useState(false)
-  const [deleting, setDeleting]           = useState(false)
-  const [formError, setFormError]         = useState<string | null>(null)
-  const [toast, setToast]                 = useState<string | null>(null)
-  const [deleteStep, setDeleteStep]       = useState<'confirm' | 'totp'>('confirm')
-  const [deleteTotp, setDeleteTotp]       = useState('')
-  const [userHas2FA, setUserHas2FA]       = useState<boolean | null>(null)
+  const [usuarios, setUsuarios] = useState<UsuarioMe[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [mostrarInactivos, setMostrar] = useState(false)
+  const [showCrear, setShowCrear] = useState(false)
+  const [editTarget, setEditTarget] = useState<UsuarioMe | null>(null)
+  const [delTarget, setDelTarget] = useState<UsuarioMe | null>(null)
+  const [reactivarTarget, setReactivar] = useState<UsuarioMe | null>(null)
+  const [form, setForm] = useState<FormState>(FORM_INICIAL)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const [deleteStep, setDeleteStep] = useState<'confirm' | 'totp'>('confirm')
+  const [deleteTotp, setDeleteTotp] = useState('')
+  const [userHas2FA, setUserHas2FA] = useState<boolean | null>(null)
 
   function showToast(msg: string) {
     setToast(msg)
@@ -68,17 +70,12 @@ export function Usuarios() {
     setLoading(true)
     try {
       const { data } = await api.get<PaginatedResponse<UsuarioMe>>('/usuarios/', {
-        params: {
-          skip,
-          limit: PAGE_SIZE,
-          incluir_inactivos: incluirInactivos,
-        },
+        params: { skip, limit: PAGE_SIZE, incluir_inactivos: incluirInactivos },
       })
       setUsuarios(data.data)
       setTotal(data.total)
     } catch {
-      setUsuarios([])
-      setTotal(0)
+      setUsuarios([]); setTotal(0)
     } finally {
       setLoading(false)
     }
@@ -86,75 +83,52 @@ export function Usuarios() {
 
   useEffect(() => { load(page * PAGE_SIZE, mostrarInactivos) }, [page, mostrarInactivos, load])
 
-  function abrirCrear() {
-    setForm(FORM_INICIAL)
-    setFormError(null)
-    setShowCrear(true)
-  }
+  function abrirCrear() { setForm(FORM_INICIAL); setFormError(null); setShowCrear(true) }
 
   function abrirEditar(u: UsuarioMe) {
     setForm({ nombre: u.nombre, email: u.email, password: '', rol: u.rol as Rol })
-    setFormError(null)
-    setEditTarget(u)
+    setFormError(null); setEditTarget(u)
   }
 
   function cerrar() {
-    setShowCrear(false)
-    setEditTarget(null)
-    setDelTarget(null)
-    setReactivar(null)
-    setFormError(null)
-    setDeleteStep('confirm')
-    setDeleteTotp('')
+    setShowCrear(false); setEditTarget(null); setDelTarget(null); setReactivar(null)
+    setFormError(null); setDeleteStep('confirm'); setDeleteTotp('')
   }
 
   function handleField(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
-    setForm(f => ({ ...f, [e.target.name]: e.target.value }))
-    setFormError(null)
+    setForm(f => ({ ...f, [e.target.name]: e.target.value })); setFormError(null)
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFormError(null)
-
+    e.preventDefault(); setFormError(null)
     if (!editTarget && form.password.length < 8) {
-      setFormError('La contrasena debe tener al menos 8 caracteres.')
-      return
+      setFormError('La contrasena debe tener al menos 8 caracteres.'); return
     }
     if (editTarget && form.password && form.password.length < 8) {
-      setFormError('La contrasena nueva debe tener al menos 8 caracteres.')
-      return
+      setFormError('La contrasena nueva debe tener al menos 8 caracteres.'); return
     }
-
     setSaving(true)
     try {
       if (editTarget) {
         const payload: Record<string, unknown> = {
-          nombre: form.nombre,
-          email: form.email,
-          rol: form.rol,
+          nombre: form.nombre, email: form.email, rol: form.rol,
         }
         if (form.password) payload.password = form.password
         await api.put(`/usuarios/${editTarget.id}`, payload)
         showToast('Usuario actualizado')
       } else {
         await api.post('/usuarios/', {
-          nombre: form.nombre,
-          email: form.email,
-          password: form.password,
-          rol: form.rol,
+          nombre: form.nombre, email: form.email,
+          password: form.password, rol: form.rol,
         })
         showToast('Usuario creado')
       }
-      cerrar()
-      load(page * PAGE_SIZE, mostrarInactivos)
+      cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
       setFormError(msg ?? 'Error al guardar. Intenta de nuevo.')
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
   async function handleDelete() {
@@ -165,16 +139,12 @@ export function Usuarios() {
         headers: { 'x-totp-code': deleteTotp }
       })
       showToast(`${delTarget.nombre} desactivado`)
-      cerrar()
-      load(page * PAGE_SIZE, mostrarInactivos)
+      cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detail = (err as any)?.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Error al desactivar.'
-      setFormError(msg)
-    } finally {
-      setDeleting(false)
-    }
+      setFormError(typeof detail === 'string' ? detail : 'Error al desactivar.')
+    } finally { setDeleting(false) }
   }
 
   async function handleReactivar() {
@@ -188,16 +158,12 @@ export function Usuarios() {
         activo: true,
       })
       showToast(`${reactivarTarget.nombre} reactivado`)
-      cerrar()
-      load(page * PAGE_SIZE, mostrarInactivos)
+      cerrar(); load(page * PAGE_SIZE, mostrarInactivos)
     } catch (err: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const detail = (err as any)?.response?.data?.detail
-      const msg = typeof detail === 'string' ? detail : 'Error al reactivar.'
-      setFormError(msg)
-    } finally {
-      setDeleting(false)
-    }
+      setFormError(typeof detail === 'string' ? detail : 'Error al reactivar.')
+    } finally { setDeleting(false) }
   }
 
   async function handleReset2FA(u: UsuarioMe) {
@@ -206,9 +172,7 @@ export function Usuarios() {
       await api.post(`/usuarios/${u.id}/reset-2fa`)
       showToast(`2FA desactivado para ${u.nombre}`)
       load(page * PAGE_SIZE, mostrarInactivos)
-    } catch {
-      showToast('Error al desactivar el 2FA.')
-    }
+    } catch { showToast('Error al desactivar el 2FA.') }
   }
 
   const inputCls = `w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900 text-sm
@@ -405,6 +369,11 @@ export function Usuarios() {
                   <option key={r} value={r}>{ROL_LABEL[r]}</option>
                 ))}
               </select>
+              {form.rol === 'docente' && (
+                <p className="text-xs text-teal-600 mt-1.5 font-semibold">
+                  Los docentes solo pueden crear solicitudes de retiro de insumos.
+                </p>
+              )}
             </div>
             {formError && (
               <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200
@@ -436,8 +405,7 @@ export function Usuarios() {
               <p className="font-bold text-slate-900 mb-1">¿Desactivar este usuario?</p>
               <p className="text-slate-500 text-sm mb-3">
                 <strong>{delTarget.nombre}</strong> ({delTarget.email}) no podra
-                iniciar sesion. Su historial de movimientos se conserva por
-                trazabilidad y puede ser reactivado cuando quieras.
+                iniciar sesion. Su historial se conserva y puede reactivarse cuando quieras.
               </p>
               {userHas2FA === false ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
