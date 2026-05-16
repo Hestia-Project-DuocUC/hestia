@@ -30,19 +30,17 @@ def get_db():
 # tablas ya existentes. Mientras el proyecto no use Alembic, declaramos aqui
 # las migraciones necesarias para evolucionar el esquema sin perder datos.
 #
-# IMPORTANTE — dos categorias de migracion con requisitos distintos:
+# El tipo de columna 'rol' depende de como SQLAlchemy creo la tabla:
 #
-# 1. MIGRACIONES_COLUMNAS (ADD COLUMN IF NOT EXISTS)
-#    Corren dentro de una transaccion normal (engine.begin()).
+# A) Enum nativo PostgreSQL (pg_type tiene 'rolususario'):
+#    -> ALTER TYPE rolususario ADD VALUE 'docente'
+#    -> Requiere AUTOCOMMIT (psycopg2 directo con conn.autocommit = True)
 #
-# 2. Valores de ENUM: PostgreSQL prohíbe ALTER TYPE ADD VALUE dentro de
-#    cualquier bloque de transaccion, incluso implicito.
-#    Ambos enfoques anteriores (execution_options y raw_connection con
-#    set_isolation_level) fallaron porque SQLAlchemy 2.x inicia una
-#    transaccion implicita antes de que el cambio de isolation surta efecto.
-#    Solucion definitiva: conectar con psycopg2 directamente usando la DSN
-#    y setear conn.autocommit = True ANTES de cualquier statement. Esto
-#    garantiza que no existe ninguna transaccion cuando se ejecuta el ALTER.
+# B) VARCHAR con CHECK constraint (pg_type NO tiene 'rolususario'):
+#    -> La constraint bloquea insertar 'docente'
+#    -> Solucion: DROP CONSTRAINT y dejar que Python valide los valores
+#    -> La validacion de Pydantic/SQLAlchemy en la app es suficiente
+#    -> Nombre tipico de SQLAlchemy: {tabla}_{columna}_check
 # ---------------------------------------------------------------------------
 
 MIGRACIONES_COLUMNAS = [
@@ -56,75 +54,94 @@ MIGRACIONES_COLUMNAS = [
     "ADD COLUMN IF NOT EXISTS avatar_b64 TEXT",
 ]
 
-# Lista de (nombre_tipo, valor) que deben existir en la BD.
-MIGRACIONES_ENUM_VALORES = [
-    ("rolususario", "docente"),
+# Lista de (tabla, columna, valores_permitidos) para migraciones de enum/check.
+MIGRACIONES_ROL = [
+    ("usuarios", "rolususario", "rol", ("admin", "operador", "visor", "docente")),
 ]
 
 
 def aplicar_migraciones_pendientes() -> None:
     """Aplica todas las migraciones idempotentes al arrancar la app.
 
-    Fase 1 — columnas: engine.begin() transaccional. Si falla, rollback
-    automatico y la excepcion sube para que el proceso no arranque con
-    el esquema a medias.
-
-    Fase 2 — valores de enum: psycopg2 directo con autocommit=True.
-    Es la unica forma fiable de ejecutar ALTER TYPE ADD VALUE en PostgreSQL
-    independientemente de la version de SQLAlchemy, porque evita cualquier
-    transaccion implicita que la capa ORM pueda abrir.
+    Fase 1: columnas nuevas (transaccional via SQLAlchemy).
+    Fase 2: valores de rol — maneja tanto enum nativo como VARCHAR+CHECK.
     """
-    # Fase 1: columnas (transaccional via SQLAlchemy)
+    # Fase 1: columnas (transaccional)
     with engine.begin() as conn:
         for sql in MIGRACIONES_COLUMNAS:
             conn.execute(text(sql))
 
-    # Fase 2: valores de enum (psycopg2 puro en autocommit)
-    _aplicar_enum_autocommit()
+    # Fase 2: rol enum/check (psycopg2 puro en autocommit)
+    _aplicar_migracion_rol()
 
 
-def _aplicar_enum_autocommit() -> None:
-    """Agrega valores faltantes a tipos ENUM usando psycopg2 directo.
+def _aplicar_migracion_rol() -> None:
+    """Migra el campo 'rol' para aceptar el nuevo valor 'docente'.
 
-    Por que psycopg2 directo y no SQLAlchemy:
-    - SQLAlchemy 2.x abre una transaccion implicita en cada conexion antes
-      de ejecutar el primer statement, incluso con execution_options o
-      set_isolation_level en raw_connection.
-    - psycopg2 con conn.autocommit = True establecido ANTES de cualquier
-      cursor/execute garantiza que no existe ningun BEGIN implicito cuando
-      se corre el ALTER TYPE ADD VALUE.
+    Detecta automaticamente si la BD usa:
+    - Enum nativo PostgreSQL ('rolususario' en pg_type): ADD VALUE
+    - VARCHAR con CHECK constraint: DROP CONSTRAINT (Python valida)
+    - VARCHAR sin constraint: no hace nada (ya funciona)
 
-    El DATABASE_URL de SQLAlchemy usa el prefijo postgresql+psycopg2://
-    que psycopg2 no entiende nativamente; se normaliza a postgresql://.
+    Usa psycopg2 directo con conn.autocommit = True para evitar cualquier
+    transaccion implicita que bloquee el ALTER TYPE ADD VALUE en PostgreSQL.
     """
     import psycopg2
 
-    # psycopg2 acepta DSN en formato URL pero sin el driver suffix
     dsn = (DATABASE_URL or "").replace("postgresql+psycopg2://", "postgresql://")
-
     conn = psycopg2.connect(dsn)
-    # CRITICO: autocommit debe setearse ANTES de abrir cualquier cursor
-    # o ejecutar cualquier statement. Si se setea despues, puede haber
-    # ya una transaccion implicita abierta.
     conn.autocommit = True
     try:
         cur = conn.cursor()
-        for tipo, valor in MIGRACIONES_ENUM_VALORES:
-            # Si el tipo no existe aun (BD nueva antes de create_all):
-            # create_all() lo creara con todos los valores del enum Python.
-            cur.execute("SELECT 1 FROM pg_type WHERE typname = %s", (tipo,))
-            if not cur.fetchone():
-                continue
-            # Si el valor ya existe: idempotente, no hacer nada.
+
+        for tabla, tipo_enum, columna, valores in MIGRACIONES_ROL:
+            # ----------------------------------------------------------------
+            # Caso A: enum nativo PostgreSQL
+            # ----------------------------------------------------------------
             cur.execute(
-                "SELECT 1 FROM pg_enum e "
-                "JOIN pg_type t ON e.enumtypid = t.oid "
-                "WHERE t.typname = %s AND e.enumlabel = %s",
-                (tipo, valor),
+                "SELECT 1 FROM pg_type WHERE typname = %s", (tipo_enum,)
             )
-            if not cur.fetchone():
-                # tipo y valor son constantes del codigo, no user input.
-                cur.execute(f"ALTER TYPE {tipo} ADD VALUE '{valor}'")
+            if cur.fetchone():
+                for valor in valores:
+                    cur.execute(
+                        "SELECT 1 FROM pg_enum e "
+                        "JOIN pg_type t ON e.enumtypid = t.oid "
+                        "WHERE t.typname = %s AND e.enumlabel = %s",
+                        (tipo_enum, valor),
+                    )
+                    if not cur.fetchone():
+                        cur.execute(
+                            f"ALTER TYPE {tipo_enum} ADD VALUE '{valor}'"
+                        )
+                continue
+
+            # ----------------------------------------------------------------
+            # Caso B: VARCHAR con CHECK constraint
+            # Busca constraints de tipo CHECK sobre la tabla que mencionen
+            # la columna, y los elimina si no incluyen todos los valores
+            # requeridos. La validacion queda en Python/Pydantic.
+            # ----------------------------------------------------------------
+            cur.execute(
+                "SELECT conname, pg_get_constraintdef(oid) "
+                "FROM pg_constraint "
+                "WHERE conrelid = %s::regclass AND contype = 'c'",
+                (tabla,),
+            )
+            constraints = cur.fetchall()
+            for conname, condef in constraints:
+                # Solo tocar constraints que involucren la columna
+                if columna not in (condef or ""):
+                    continue
+                # Si la constraint ya incluye todos los valores requeridos,
+                # no hacer nada.
+                if all(v in (condef or "") for v in valores):
+                    continue
+                # DROP: eliminar la constraint restrictiva.
+                # Los valores permitidos los controla Python/Pydantic.
+                cur.execute(
+                    f"ALTER TABLE {tabla} DROP CONSTRAINT IF EXISTS {conname}"
+                )
+
         cur.close()
     finally:
         conn.close()
