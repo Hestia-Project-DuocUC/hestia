@@ -36,13 +36,14 @@ def get_db():
 #    Corren dentro de una transaccion normal (engine.begin()).
 #
 # 2. Valores de ENUM: PostgreSQL NO permite ALTER TYPE ADD VALUE dentro de
-#    una transaccion. Se manejan con _agregar_valor_enum() en modo AUTOCOMMIT,
-#    con verificacion previa de existencia via pg_type / pg_enum.
-#    RAZON del chequeo previo: en BD nueva, create_all() ya crea el tipo con
-#    todos los valores actuales del enum Python, por lo que intentar ALTER
-#    sobre un tipo inexistente (si create_all() aun no corrio en esta sesion)
-#    lanzaria UndefinedObject. La funcion detecta ese caso y lo omite de
-#    forma segura: create_all() se encargara de crearlo correctamente.
+#    ninguna transaccion, ni siquiera implicita.
+#    SQLAlchemy 2.x inicia una transaccion implicita en cada conexion antes
+#    de ejecutar el primer statement, por lo que execution_options(
+#    isolation_level="AUTOCOMMIT") aplicado sobre la conexion ya creada
+#    no tiene el efecto esperado.
+#    Solucion: usar engine.raw_connection() para obtener la conexion psycopg2
+#    subyacente directamente y setear isolation_level=0 (AUTOCOMMIT) antes
+#    de cualquier statement. Esta es la forma mas confiable y portable.
 # ---------------------------------------------------------------------------
 
 MIGRACIONES_COLUMNAS = [
@@ -62,52 +63,49 @@ MIGRACIONES_ENUM_VALORES = [
 ]
 
 
-def _agregar_valor_enum(conn, tipo: str, valor: str) -> None:
-    """Agrega un valor a un enum PostgreSQL de forma segura e idempotente.
-
-    Logica:
-    1. Si el tipo NO existe en pg_type: no hace nada. Esto ocurre en BD nueva
-       antes de que create_all() haya corrido, o si el tipo fue creado con
-       un nombre distinto. En BD nueva, create_all() lo creara con todos los
-       valores actuales del enum Python, incluyendo el que queremos agregar.
-    2. Si el tipo existe y el valor YA esta: no hace nada (idempotente).
-    3. Si el tipo existe y el valor FALTA: ejecuta ALTER TYPE ADD VALUE.
-       Requiere AUTOCOMMIT (restriccion de PostgreSQL para esta sentencia).
-    """
-    tipo_existe = conn.execute(
-        text("SELECT 1 FROM pg_type WHERE typname = :t"),
-        {"t": tipo},
-    ).fetchone()
-
-    if not tipo_existe:
-        # BD nueva o tipo con nombre diferente: create_all() lo resolvera.
-        return
-
-    valor_existe = conn.execute(
-        text(
-            "SELECT 1 FROM pg_enum e "
-            "JOIN pg_type t ON e.enumtypid = t.oid "
-            "WHERE t.typname = :t AND e.enumlabel = :v"
-        ),
-        {"t": tipo, "v": valor},
-    ).fetchone()
-
-    if not valor_existe:
-        conn.execute(text(f"ALTER TYPE {tipo} ADD VALUE '{valor}'"))
-
-
 def aplicar_migraciones_pendientes() -> None:
     """Aplica todas las migraciones idempotentes al arrancar la app.
 
-    Fase 1: columnas (transaccional via engine.begin()).
-    Fase 2: valores de enum (AUTOCOMMIT con verificacion previa).
+    Fase 1 — columnas: dentro de una transaccion normal (engine.begin()).
+    Si falla alguna sentencia el bloque completo hace rollback y la excepcion
+    sube para que el proceso no arranque con el esquema a medias.
+
+    Fase 2 — tipos ENUM: via psycopg2 raw_connection() en AUTOCOMMIT puro.
+    PostgreSQL exige que ALTER TYPE ADD VALUE corra fuera de cualquier
+    transaccion (ni siquiera implicita). SQLAlchemy 2.x no permite garantizar
+    esto a traves de la capa ORM de forma confiable, asi que obtenemos la
+    conexion psycopg2 subyacente directamente y seteamos isolation_level=0
+    antes del primer statement.
     """
     # Fase 1: columnas (transaccional)
     with engine.begin() as conn:
         for sql in MIGRACIONES_COLUMNAS:
             conn.execute(text(sql))
 
-    # Fase 2: valores de enum (AUTOCOMMIT — PostgreSQL lo exige)
-    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+    # Fase 2: valores de enum (psycopg2 raw en AUTOCOMMIT)
+    raw_conn = engine.raw_connection()
+    try:
+        # isolation_level=0 equivale a psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
+        # Debe setearse ANTES del primer execute para que no haya transaccion abierta.
+        raw_conn.set_isolation_level(0)
+        cur = raw_conn.cursor()
         for tipo, valor in MIGRACIONES_ENUM_VALORES:
-            _agregar_valor_enum(conn, tipo, valor)
+            # 1. Si el tipo no existe en pg_type: create_all() lo creara con
+            #    todos los valores actuales del enum Python (incl. el nuevo).
+            cur.execute("SELECT 1 FROM pg_type WHERE typname = %s", (tipo,))
+            if not cur.fetchone():
+                continue
+            # 2. Si el valor ya existe: idempotente, no hacer nada.
+            cur.execute(
+                "SELECT 1 FROM pg_enum e "
+                "JOIN pg_type t ON e.enumtypid = t.oid "
+                "WHERE t.typname = %s AND e.enumlabel = %s",
+                (tipo, valor),
+            )
+            if not cur.fetchone():
+                # ALTER TYPE ADD VALUE no acepta parametros — el nombre
+                # del tipo y el valor son identifiers/literales, no user input.
+                cur.execute(f"ALTER TYPE {tipo} ADD VALUE '{valor}'")
+        cur.close()
+    finally:
+        raw_conn.close()
