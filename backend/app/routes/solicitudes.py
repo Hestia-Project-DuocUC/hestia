@@ -78,9 +78,8 @@ def _construir_response(s: SolicitudRetiro) -> SolicitudResponse:
 # ---------------------------------------------------------------------------
 # IMPORTANTE: rutas estaticas (/mis-solicitudes) van ANTES que las dinamicas
 # (/{solicitud_id}) aunque int != str — buena practica preventiva.
-
-# Se añade otra ruta estatica (/resumen-recientes) 
-# para el pop-up de bienvenida del operador, que muestra un 
+# Se añade otra ruta estatica (/resumen-recientes)
+# para el pop-up de bienvenida del operador, que muestra un
 # resumen de las solicitudes recientes.
 # ---------------------------------------------------------------------------
 
