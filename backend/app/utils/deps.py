@@ -47,6 +47,16 @@ def get_usuario_actual(
     return usuario
 
 
+def require_docente(usuario: Usuario = Depends(get_usuario_actual)) -> Usuario:
+    """Requiere rol docente. Usado en endpoints exclusivos del flujo de retiro."""
+    if usuario.rol != RolUsuario.docente:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol docente para esta accion"
+        )
+    return usuario
+
+
 def require_operador(usuario: Usuario = Depends(get_usuario_actual)) -> Usuario:
     """Requiere rol admin u operador. Usado en endpoints de escritura general."""
     if usuario.rol not in [RolUsuario.admin, RolUsuario.operador]:

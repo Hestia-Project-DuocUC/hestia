@@ -6,11 +6,12 @@ from app.database import Base, engine, aplicar_migraciones_pendientes
 # create_all() necesita conocer TODOS los modelos antes de ejecutarse.
 from app.models import sala, categoria, usuario, movimiento, insumo  # noqa
 from app.models import audit_log  # noqa
-from app.models import solicitud   # noqa  <- SolicitudRetiro y SolicitudItem
+from app.models import solicitud  # noqa  <- SolicitudRetiro y SolicitudItem
 from app.routes import (
     salas, categorias, usuarios, movimientos, insumos, auth, resumen, importar
 )
 from app.routes import audit_log as audit_log_routes
+from app.routes import solicitudes
 
 # 1) crea tablas que no existen. 2) aplica ALTER TABLE / ALTER TYPE idempotentes
 # para columnas y valores de enum agregados a tablas ya existentes.
@@ -55,7 +56,7 @@ app.include_router(auth.router)
 app.include_router(resumen.router)
 app.include_router(importar.router)
 app.include_router(audit_log_routes.router)
-# Bloque 2 agregara: app.include_router(solicitudes.router)
+app.include_router(solicitudes.router)
 
 
 @app.get("/")
