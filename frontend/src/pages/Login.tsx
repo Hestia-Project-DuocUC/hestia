@@ -9,16 +9,16 @@ type Modo2FA = 'totp' | 'recovery'
 
 export function Login() {
   const navigate = useNavigate()
-  const setAuth  = useAuthStore((s) => s.setAuth)
+  const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [email,    setEmail]    = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [totp,     setTotp]     = useState('')
+  const [totp, setTotp] = useState('')
   const [recovery, setRecovery] = useState('')
   const [preToken, setPreToken] = useState<string | null>(null)
-  const [modo2FA,  setModo2FA]  = useState<Modo2FA>('totp')
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState<string | null>(null)
+  const [modo2FA, setModo2FA] = useState<Modo2FA>('totp')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const is2FA = preToken !== null
 
@@ -29,9 +29,6 @@ export function Login() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    // NO limpiamos el error aqui. Si habia un mensaje de "Te quedan N intentos",
-    // debe permanecer visible mientras vuela la nueva peticion. El error se limpia
-    // en onChange de los campos, que es el momento semanticamente correcto.
     setLoading(true)
     try {
       const form = new URLSearchParams()
@@ -51,7 +48,7 @@ export function Login() {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
-      setError(msg ?? 'Error al iniciar sesion')
+      setError(msg ?? 'Error al iniciar sesión')
     } finally { setLoading(false) }
   }
 
@@ -69,7 +66,7 @@ export function Login() {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
-      setError(msg ?? 'Codigo incorrecto')
+      setError(msg ?? 'Código incorrecto')
     } finally { setLoading(false) }
   }
 
@@ -82,13 +79,12 @@ export function Login() {
       })
       if (data.access_token) {
         setAuth(data.access_token, { nombre: data.usuario!, rol: data.rol! })
-        // El 2FA fue desactivado automaticamente — redirigir a configuracion
         navigate('/seguridad')
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
-      setError(msg ?? 'Codigo de recuperacion invalido')
+      setError(msg ?? 'Código de recuperación inválido')
     } finally { setLoading(false) }
   }
 
@@ -113,7 +109,7 @@ export function Login() {
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-32 h-32 mb-4">
-            <Logo className="w-32 h-32"/>
+            <Logo className="w-32 h-32" />
           </div>
           <h1 className="text-4xl font-black text-white tracking-tight">Hestia</h1>
         </div>
@@ -157,9 +153,9 @@ export function Login() {
                            mb-4 flex items-center gap-1">
                 ← Volver
               </button>
-              <h2 className="text-base font-bold text-white mb-1">Verificacion 2FA</h2>
+              <h2 className="text-base font-bold text-white mb-1">Verificación 2FA</h2>
               <p className="text-slate-400 text-xs mb-5">
-                Ingresa el codigo de 6 digitos de Google Authenticator.
+                Ingresa el código de 6 dígitos de Google Authenticator.
               </p>
               <form onSubmit={handleTotp} className="space-y-4">
                 <input
@@ -177,7 +173,7 @@ export function Login() {
                                 px-3 py-2 rounded-lg font-semibold">{error}</p>
                 )}
                 <button type="submit" disabled={loading || totp.length !== 6} className={btnCls}>
-                  {loading ? 'Verificando...' : 'Confirmar codigo'}
+                  {loading ? 'Verificando...' : 'Confirmar código'}
                 </button>
               </form>
               <button
@@ -185,7 +181,7 @@ export function Login() {
                 className="w-full mt-4 text-xs text-slate-500 hover:text-slate-300
                            font-semibold transition-colors"
               >
-                Perdi acceso a mi app — usar codigo de recuperacion
+                Perdí acceso a mi app — usar código de recuperación
               </button>
             </>
           ) : (
@@ -196,9 +192,9 @@ export function Login() {
                            mb-4 flex items-center gap-1">
                 ← Volver
               </button>
-              <h2 className="text-base font-bold text-white mb-1">Codigo de recuperacion</h2>
+              <h2 className="text-base font-bold text-white mb-1">Código de recuperación</h2>
               <p className="text-slate-400 text-xs mb-5">
-                Ingresa uno de tus codigos de un solo uso.
+                Ingresa uno de tus códigos de un solo uso.
                 Formato: <code className="text-teal-400">XXXXXXXX-XXXXXXXX</code>
               </p>
               <form onSubmit={handleRecovery} className="space-y-4">
@@ -222,7 +218,7 @@ export function Login() {
                   disabled={loading || recovery.length !== 17}
                   className={btnCls}
                 >
-                  {loading ? 'Verificando...' : 'Acceder con codigo de recuperacion'}
+                  {loading ? 'Verificando...' : 'Acceder con código de recuperación'}
                 </button>
               </form>
             </>

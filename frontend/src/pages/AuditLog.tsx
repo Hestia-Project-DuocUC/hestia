@@ -27,34 +27,31 @@ function formatFecha(iso: string): string {
 }
 
 export function AuditLog() {
-  const [logs, setLogs]               = useState<AuditLogEntry[]>([])
-  const [total, setTotal]             = useState(0)
-  const [page, setPage]               = useState(0)
-  const [loading, setLoading]         = useState(true)
-  const [refreshing, setRefreshing]   = useState(false)
+  const [logs, setLogs] = useState<AuditLogEntry[]>([])
+  const [total, setTotal] = useState(0)
+  const [page, setPage] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [inputAccion, setInputAccion] = useState('')
   const [filtroAccion, setFiltroAccion] = useState('')
-  const [refetchKey, setRefetchKey]   = useState(0)
-  const [apiError, setApiError]       = useState<string | null>(null)
+  const [refetchKey, setRefetchKey] = useState(0)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const load = useCallback(async (skip: number, accion: string) => {
-    setLoading(true)
-    setApiError(null)
+    setLoading(true); setApiError(null)
     try {
       const params: Record<string, unknown> = { skip, limit: PAGE_SIZE }
       if (accion) params.accion = accion
       const { data } = await api.get<PaginatedResponse<AuditLogEntry>>(
         '/audit-log/', { params }
       )
-      setLogs(data.data)
-      setTotal(data.total)
+      setLogs(data.data); setTotal(data.total)
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
-      setApiError(msg ?? 'No se pudo conectar con el servidor. Revisa que la API este activa.')
+      setApiError(msg ?? 'No se pudo conectar con el servidor. Revisa que la API esté activa.')
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      setLoading(false); setRefreshing(false)
     }
   }, [])
 
@@ -63,15 +60,11 @@ export function AuditLog() {
   }, [page, filtroAccion, refetchKey, load])
 
   function handleBuscar(e: React.FormEvent) {
-    e.preventDefault()
-    setPage(0)
+    e.preventDefault(); setPage(0)
     setFiltroAccion(inputAccion.trim().toUpperCase())
   }
 
-  function handleRefresh() {
-    setRefreshing(true)
-    setRefetchKey(k => k + 1)
-  }
+  function handleRefresh() { setRefreshing(true); setRefetchKey(k => k + 1) }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
@@ -85,8 +78,7 @@ export function AuditLog() {
           </p>
         </div>
         <button
-          onClick={handleRefresh}
-          disabled={refreshing || loading}
+          onClick={handleRefresh} disabled={refreshing || loading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200
                      text-slate-600 hover:bg-slate-100 text-sm font-semibold transition-colors"
         >
@@ -95,15 +87,13 @@ export function AuditLog() {
         </button>
       </div>
 
-      {/* Filtro */}
       <form onSubmit={handleBuscar} className="flex gap-3 mb-5">
         <div className="relative flex-1 max-w-xs">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            type="text"
-            value={inputAccion}
+            type="text" value={inputAccion}
             onChange={e => setInputAccion(e.target.value)}
-            placeholder="Filtrar por accion (ej: LOGIN)"
+            placeholder="Filtrar por acción (ej: LOGIN)"
             className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200
                        focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white"
           />
@@ -123,7 +113,6 @@ export function AuditLog() {
         )}
       </form>
 
-      {/* Error de API */}
       {apiError && (
         <div className="flex items-center gap-3 bg-rose-50 border border-rose-200
                         rounded-xl px-4 py-3 mb-5 text-rose-700 text-sm">
@@ -132,7 +121,6 @@ export function AuditLog() {
         </div>
       )}
 
-      {/* Contador */}
       {!loading && !apiError && (
         <p className="text-sm text-slate-500 mb-4">
           {total} registro{total !== 1 ? 's' : ''}
@@ -140,13 +128,12 @@ export function AuditLog() {
         </p>
       )}
 
-      {/* Tabla */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50">
-                {['Fecha', 'Accion', 'Usuario', 'Entidad', 'Detalle', 'IP'].map(h => (
+                {['Fecha', 'Acción', 'Usuario', 'Entidad', 'Detalle', 'IP'].map(h => (
                   <th key={h}
                     className="text-left px-4 py-3 text-xs font-bold
                                text-slate-500 uppercase tracking-wide whitespace-nowrap">
@@ -204,7 +191,7 @@ export function AuditLog() {
 
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200">
-            <p className="text-xs text-slate-500">Pagina {page + 1} de {totalPages}</p>
+            <p className="text-xs text-slate-500">Página {page + 1} de {totalPages}</p>
             <div className="flex gap-1">
               <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}
                 className="px-3 py-1 text-xs rounded-lg border border-slate-200

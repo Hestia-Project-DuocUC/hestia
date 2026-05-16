@@ -10,20 +10,14 @@ import type {
 } from '../types/api'
 import { Badge } from '../components/ui/Badge'
 
-// ---------------------------------------------------------------------------
-// Tipos internos del carrito
-// ---------------------------------------------------------------------------
 interface CartItem {
   insumo: InsumoResponse
   cantidad: number
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 function estadoBadge(estado: EstadoSolicitud) {
   if (estado === 'completada') return <Badge variant="success">Completada</Badge>
-  if (estado === 'en_preparacion') return <Badge variant="info">En preparacion</Badge>
+  if (estado === 'en_preparacion') return <Badge variant="info">En preparación</Badge>
   return <Badge variant="warning">Pendiente</Badge>
 }
 
@@ -53,14 +47,8 @@ function urgenciaBadge(minutos: number) {
   return null
 }
 
-// ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
 export function SolicitudDocente() {
-  // Datos de referencia
   const [salas, setSalas] = useState<SalaResponse[]>([])
-
-  // Carrito
   const [salaId, setSalaId] = useState('')
   const [fechaClase, setFechaClase] = useState('')
   const [notas, setNotas] = useState('')
@@ -69,7 +57,6 @@ export function SolicitudDocente() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
-  // Busqueda de insumos para el carrito
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<InsumoResponse[]>([])
   const [searchLoading, setSearchLoading] = useState(false)
@@ -77,7 +64,6 @@ export function SolicitudDocente() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
-  // Historial
   const [historial, setHistorial] = useState<SolicitudResponse[]>([])
   const [loadingHistorial, setLoadingHistorial] = useState(true)
   const [expandido, setExpandido] = useState<number | null>(null)
@@ -86,18 +72,11 @@ export function SolicitudDocente() {
     setToast(msg); setTimeout(() => setToast(null), 3500)
   }
 
-  // Fecha minima para el picker: ahora (sin segundos)
-  const fechaMin = new Date(Date.now() - 5 * 60 * 1000)
-    .toISOString().slice(0, 16)
-
-  // Minutos hasta la clase seleccionada
+  const fechaMin = new Date(Date.now() - 5 * 60 * 1000).toISOString().slice(0, 16)
   const minutosHastaClase = fechaClase
     ? Math.round((new Date(fechaClase).getTime() - Date.now()) / 60000)
     : null
 
-  // ---------------------------------------------------------------------------
-  // Carga inicial
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     api.get<PaginatedResponse<SalaResponse>>('/salas/', { params: { limit: 200 } })
       .then(({ data }) => setSalas(data.data))
@@ -108,16 +87,11 @@ export function SolicitudDocente() {
     try {
       const { data } = await api.get<SolicitudResponse[]>('/solicitudes/mis-solicitudes')
       setHistorial(data)
-    } finally {
-      setLoadingHistorial(false)
-    }
+    } finally { setLoadingHistorial(false) }
   }, [])
 
   useEffect(() => { cargarHistorial() }, [cargarHistorial])
 
-  // ---------------------------------------------------------------------------
-  // Busqueda de insumos con debounce
-  // ---------------------------------------------------------------------------
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     if (query.trim().length < 2) {
@@ -131,14 +105,11 @@ export function SolicitudDocente() {
         })
         setSearchResults(data.data.filter(i => i.activo && i.stock_actual > 0))
         setShowDropdown(true)
-      } finally {
-        setSearchLoading(false)
-      }
+      } finally { setSearchLoading(false) }
     }, 280)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [query])
 
-  // Cerrar dropdown al click fuera
   useEffect(() => {
     function handler(e: MouseEvent) {
       if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
@@ -149,15 +120,11 @@ export function SolicitudDocente() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // ---------------------------------------------------------------------------
-  // Carrito
-  // ---------------------------------------------------------------------------
   function agregarAlCarrito(insumo: InsumoResponse) {
     setQuery(''); setShowDropdown(false)
     setCartItems(prev => {
       const existente = prev.find(i => i.insumo.id === insumo.id)
       if (existente) {
-        // Si ya esta, incrementa cantidad (sin superar stock)
         return prev.map(i =>
           i.insumo.id === insumo.id
             ? { ...i, cantidad: Math.min(i.cantidad + 1, insumo.stock_actual) }
@@ -182,16 +149,12 @@ export function SolicitudDocente() {
     setCartItems(prev => prev.filter(i => i.insumo.id !== insumoId))
   }
 
-  // ---------------------------------------------------------------------------
-  // Submit
-  // ---------------------------------------------------------------------------
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitError(null)
     if (!salaId) { setSubmitError('Selecciona una sala.'); return }
     if (!fechaClase) { setSubmitError('Indica la fecha y hora de tu clase.'); return }
     if (cartItems.length === 0) { setSubmitError('Agrega al menos un insumo al carrito.'); return }
-
     setSubmitting(true)
     try {
       await api.post('/solicitudes/', {
@@ -203,7 +166,6 @@ export function SolicitudDocente() {
           cantidad_solicitada: i.cantidad,
         })),
       })
-      // Reset carrito
       setSalaId(''); setFechaClase(''); setNotas(''); setCartItems([])
       showToast('Solicitud enviada correctamente')
       cargarHistorial()
@@ -211,18 +173,12 @@ export function SolicitudDocente() {
       const detail = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
       setSubmitError(detail ?? 'Error al enviar la solicitud. Intenta de nuevo.')
-    } finally {
-      setSubmitting(false)
-    }
+    } finally { setSubmitting(false) }
   }
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   const inputCls = `w-full px-3 py-2.5 rounded-lg border border-slate-200 text-slate-900
     text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 bg-slate-50
     focus:bg-white placeholder:text-slate-400 transition-all`
-
   const totalItems = cartItems.reduce((s, i) => s + i.cantidad, 0)
 
   return (
@@ -234,7 +190,6 @@ export function SolicitudDocente() {
         </div>
       )}
 
-      {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
           <ClipboardList size={24} className="text-teal-600" />
@@ -245,47 +200,28 @@ export function SolicitudDocente() {
         </p>
       </div>
 
-      {/* Formulario nueva solicitud */}
       <form onSubmit={handleSubmit}>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
           <h2 className="text-sm font-bold text-slate-700 mb-4">Nueva solicitud</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {/* Sala */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase
-                               tracking-wide mb-1.5">
-                Sala *
-              </label>
-              <select
-                value={salaId}
-                onChange={e => setSalaId(e.target.value)}
-                className={inputCls + ' cursor-pointer'}
-              >
+                               tracking-wide mb-1.5">Sala *</label>
+              <select value={salaId} onChange={e => setSalaId(e.target.value)}
+                className={inputCls + ' cursor-pointer'}>
                 <option value="">Seleccionar sala...</option>
-                {salas.map(s => (
-                  <option key={s.id} value={s.id}>{s.nombre}</option>
-                ))}
+                {salas.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             </div>
-
-            {/* Fecha y hora */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase
-                               tracking-wide mb-1.5">
-                Fecha y hora de clase *
-              </label>
-              <input
-                type="datetime-local"
-                value={fechaClase}
-                min={fechaMin}
-                onChange={e => setFechaClase(e.target.value)}
-                className={inputCls}
-              />
+                               tracking-wide mb-1.5">Fecha y hora de clase *</label>
+              <input type="datetime-local" value={fechaClase} min={fechaMin}
+                onChange={e => setFechaClase(e.target.value)} className={inputCls} />
             </div>
           </div>
 
-          {/* Advertencia de urgencia */}
           {minutosHastaClase !== null && minutosHastaClase <= 60 && minutosHastaClase >= 0 && (
             <div className={`flex items-start gap-2 p-3 rounded-xl mb-4 text-sm ${
               minutosHastaClase <= 30
@@ -295,27 +231,20 @@ export function SolicitudDocente() {
               <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
               <span>
                 <strong>Clase en {minutosHastaClase} minutos.</strong>{' '}
-                El personal podria no alcanzar a preparar el pedido a tiempo.
+                El personal podría no alcanzar a preparar el pedido a tiempo.
               </span>
             </div>
           )}
 
-          {/* Buscador de insumos */}
           <div className="mb-4">
             <label className="block text-xs font-bold text-slate-500 uppercase
-                             tracking-wide mb-1.5">
-              Agregar insumos al carrito
-            </label>
+                             tracking-wide mb-1.5">Agregar insumos al carrito</label>
             <div ref={searchContainerRef} className="relative">
               <div className="relative">
-                <Search
-                  size={15}
+                <Search size={15}
                   className="absolute left-3 top-1/2 -translate-y-1/2
-                             text-slate-400 pointer-events-none"
-                />
-                <input
-                  type="text"
-                  value={query}
+                             text-slate-400 pointer-events-none" />
+                <input type="text" value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder="Buscar insumo por nombre..."
                   autoComplete="off"
@@ -329,7 +258,6 @@ export function SolicitudDocente() {
                 )}
               </div>
 
-              {/* Dropdown de resultados */}
               {showDropdown && searchResults.length > 0 && (
                 <ul className="absolute left-0 right-0 top-full mt-1.5 bg-white border
                                border-slate-200 rounded-xl shadow-lg z-40 overflow-hidden">
@@ -337,12 +265,10 @@ export function SolicitudDocente() {
                     const enCarrito = cartItems.some(i => i.insumo.id === insumo.id)
                     return (
                       <li key={insumo.id}>
-                        <button
-                          type="button"
+                        <button type="button"
                           onMouseDown={e => { e.preventDefault(); agregarAlCarrito(insumo) }}
                           className="w-full flex items-center justify-between gap-3 px-4
-                                     py-2.5 text-sm hover:bg-slate-50 transition-colors"
-                        >
+                                     py-2.5 text-sm hover:bg-slate-50 transition-colors">
                           <div className="flex items-center gap-2 min-w-0">
                             <Package size={13} className="text-slate-300 flex-shrink-0" />
                             <span className="font-semibold text-slate-800 truncate">
@@ -383,7 +309,6 @@ export function SolicitudDocente() {
             </div>
           </div>
 
-          {/* Items del carrito */}
           {cartItems.length > 0 && (
             <div className="border border-slate-200 rounded-xl overflow-hidden mb-4">
               <div className="bg-slate-50 px-4 py-2.5 border-b border-slate-200 flex
@@ -395,8 +320,7 @@ export function SolicitudDocente() {
               </div>
               <ul className="divide-y divide-slate-100">
                 {cartItems.map(({ insumo, cantidad }) => (
-                  <li key={insumo.id}
-                    className="flex items-center gap-3 px-4 py-3">
+                  <li key={insumo.id} className="flex items-center gap-3 px-4 py-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-slate-900 truncate">
                         {insumo.nombre}
@@ -407,46 +331,26 @@ export function SolicitudDocente() {
                         </span> unidades
                       </p>
                     </div>
-                    {/* Selector de cantidad */}
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(insumo.id, cantidad - 1)}
+                      <button type="button" onClick={() => setCantidad(insumo.id, cantidad - 1)}
                         disabled={cantidad <= 1}
                         className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200
                                    text-slate-600 font-bold text-sm disabled:opacity-30
-                                   transition-colors flex items-center justify-center"
-                      >
-                        -
-                      </button>
-                      <input
-                        type="number"
-                        min={1}
-                        max={insumo.stock_actual}
-                        value={cantidad}
+                                   transition-colors flex items-center justify-center">-</button>
+                      <input type="number" min={1} max={insumo.stock_actual} value={cantidad}
                         onChange={e => setCantidad(insumo.id, parseInt(e.target.value) || 1)}
                         className="w-14 text-center text-sm font-bold border border-slate-200
                                    rounded-lg py-1 focus:outline-none focus:ring-2
-                                   focus:ring-teal-500"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCantidad(insumo.id, cantidad + 1)}
+                                   focus:ring-teal-500" />
+                      <button type="button" onClick={() => setCantidad(insumo.id, cantidad + 1)}
                         disabled={cantidad >= insumo.stock_actual}
                         className="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200
                                    text-slate-600 font-bold text-sm disabled:opacity-30
-                                   transition-colors flex items-center justify-center"
-                      >
-                        +
-                      </button>
+                                   transition-colors flex items-center justify-center">+</button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => eliminarDelCarrito(insumo.id)}
+                    <button type="button" onClick={() => eliminarDelCarrito(insumo.id)}
                       className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500
-                                 hover:bg-rose-50 transition-colors"
-                      title="Quitar del carrito"
-                    >
+                                 hover:bg-rose-50 transition-colors" title="Quitar del carrito">
                       <Trash2 size={14} />
                     </button>
                   </li>
@@ -455,41 +359,28 @@ export function SolicitudDocente() {
             </div>
           )}
 
-          {/* Notas */}
           <div className="mb-4">
             <label className="block text-xs font-bold text-slate-500 uppercase
-                             tracking-wide mb-1.5">
-              Notas (opcional)
-            </label>
-            <textarea
-              value={notas}
-              onChange={e => setNotas(e.target.value)}
-              rows={2}
+                             tracking-wide mb-1.5">Notas (opcional)</label>
+            <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2}
               placeholder="Indicaciones adicionales para el personal..."
-              className={inputCls + ' resize-none'}
-            />
+              className={inputCls + ' resize-none'} />
           </div>
 
           {submitError && (
             <p className="text-rose-600 text-sm bg-rose-50 border border-rose-200
-                          px-3 py-2 rounded-lg font-semibold mb-4">
-              {submitError}
-            </p>
+                          px-3 py-2 rounded-lg font-semibold mb-4">{submitError}</p>
           )}
 
-          <button
-            type="submit"
-            disabled={submitting || cartItems.length === 0}
+          <button type="submit" disabled={submitting || cartItems.length === 0}
             className="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700
                        text-white font-bold text-sm transition-colors
-                       disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+                       disabled:opacity-50 disabled:cursor-not-allowed">
             {submitting ? 'Enviando...' : `Enviar solicitud (${totalItems} unidades)`}
           </button>
         </div>
       </form>
 
-      {/* Historial */}
       <div>
         <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
           Mis solicitudes
@@ -507,33 +398,23 @@ export function SolicitudDocente() {
         ) : historial.length === 0 ? (
           <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
             <ClipboardList size={28} className="mx-auto mb-2 text-slate-300" />
-            <p className="text-sm font-semibold text-slate-400">
-              Aun no tienes solicitudes.
-            </p>
+            <p className="text-sm font-semibold text-slate-400">Aún no tienes solicitudes.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {historial.map(sol => (
               <div key={sol.id}
-                className="bg-white rounded-xl border border-slate-200 shadow-sm
-                           overflow-hidden">
-                {/* Cabecera de la solicitud */}
-                <button
-                  type="button"
+                className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <button type="button"
                   onClick={() => setExpandido(expandido === sol.id ? null : sol.id)}
                   className="w-full flex items-center justify-between px-5 py-4
-                             hover:bg-slate-50 transition-colors text-left"
-                >
+                             hover:bg-slate-50 transition-colors text-left">
                   <div className="flex items-center gap-3 min-w-0">
                     {estadoBadge(sol.estado)}
                     <div className="min-w-0">
-                      <p className="text-sm font-bold text-slate-900">
-                        {sol.sala_nombre}
-                      </p>
+                      <p className="text-sm font-bold text-slate-900">{sol.sala_nombre}</p>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs text-slate-400">
-                          {formatFechaClase(sol.fecha_clase)}
-                        </p>
+                        <p className="text-xs text-slate-400">{formatFechaClase(sol.fecha_clase)}</p>
                         {urgenciaBadge(sol.minutos_hasta_clase)}
                       </div>
                     </div>
@@ -548,29 +429,23 @@ export function SolicitudDocente() {
                   </div>
                 </button>
 
-                {/* Detalle expandido */}
                 {expandido === sol.id && (
                   <div className="px-5 pb-4 border-t border-slate-100">
                     <ul className="mt-3 space-y-2">
                       {sol.items.map(item => (
-                        <li key={item.id}
-                          className="flex items-center justify-between text-sm">
+                        <li key={item.id} className="flex items-center justify-between text-sm">
                           <span className="text-slate-700">{item.insumo_nombre}</span>
-                          <span className="font-bold text-slate-900">
-                            x{item.cantidad_solicitada}
-                          </span>
+                          <span className="font-bold text-slate-900">x{item.cantidad_solicitada}</span>
                         </li>
                       ))}
                     </ul>
                     {sol.notas && (
-                      <p className="mt-3 text-xs text-slate-500 bg-slate-50
-                                    rounded-lg px-3 py-2">
+                      <p className="mt-3 text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">
                         <strong>Notas:</strong> {sol.notas}
                       </p>
                     )}
                     {sol.notas_operador && (
-                      <p className="mt-2 text-xs text-teal-700 bg-teal-50
-                                    rounded-lg px-3 py-2">
+                      <p className="mt-2 text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2">
                         <strong>Operador:</strong> {sol.notas_operador}
                       </p>
                     )}

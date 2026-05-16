@@ -14,21 +14,15 @@ import { MetricCard } from '../components/ui/Card'
 import { MetricCardSkeleton, AlertaCardSkeleton } from '../components/ui/Skeleton'
 import { Badge } from '../components/ui/Badge'
 
-// ---------------------------------------------------------------------------
-// Helpers de tiempo relativo
-// ---------------------------------------------------------------------------
 function tiempoRelativo(isoFecha: string): string {
   const diff = Math.floor((Date.now() - new Date(isoFecha).getTime()) / 1000)
-  if (diff < 60)   return 'Hace un momento'
+  if (diff < 60) return 'Hace un momento'
   if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`
   if (diff < 86400) return `Hace ${Math.floor(diff / 3600)} h`
   if (diff < 172800) return 'Ayer'
   return new Date(isoFecha).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' })
 }
 
-// ---------------------------------------------------------------------------
-// Grafico de barras agrupadas (entradas vs salidas)
-// ---------------------------------------------------------------------------
 function GraficoBarras({ datos }: { datos: DiaMovimiento[] }) {
   if (!datos.length) return null
   const max = Math.max(...datos.flatMap(d => [d.entradas, d.salidas]), 1)
@@ -45,13 +39,11 @@ function GraficoBarras({ datos }: { datos: DiaMovimiento[] }) {
         {datos.map(d => (
           <div key={d.fecha} className="flex-1 flex flex-col items-center">
             <div className="flex items-end gap-0.5 h-24 w-full">
-              <div
-                title={`Entradas: ${d.entradas}`}
+              <div title={`Entradas: ${d.entradas}`}
                 className="flex-1 bg-teal-500 rounded-t-sm transition-all duration-500"
                 style={{ height: `${(d.entradas / max) * 100}%`, minHeight: d.entradas ? 3 : 0 }}
               />
-              <div
-                title={`Salidas: ${d.salidas}`}
+              <div title={`Salidas: ${d.salidas}`}
                 className="flex-1 bg-amber-400 rounded-t-sm transition-all duration-500"
                 style={{ height: `${(d.salidas / max) * 100}%`, minHeight: d.salidas ? 3 : 0 }}
               />
@@ -72,9 +64,6 @@ function GraficoBarras({ datos }: { datos: DiaMovimiento[] }) {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Estado del inventario con barras horizontales
-// ---------------------------------------------------------------------------
 function GraficoEstado({ total, bajo, agotados }: {
   total: number; bajo: number; agotados: number
 }) {
@@ -83,9 +72,9 @@ function GraficoEstado({ total, bajo, agotados }: {
   const base = Math.max(total, 1)
 
   const filas = [
-    { label: 'Stock OK',    valor: ok,          pct: ok / base,         color: 'bg-teal-500',  texto: 'text-teal-700'  },
-    { label: 'Bajo minimo', valor: soloAlerta,  pct: soloAlerta / base, color: 'bg-amber-400', texto: 'text-amber-700' },
-    { label: 'Agotados',   valor: agotados,    pct: agotados / base,   color: 'bg-rose-500',  texto: 'text-rose-700'  },
+    { label: 'Stock OK', valor: ok, pct: ok / base, color: 'bg-teal-500', texto: 'text-teal-700' },
+    { label: 'Bajo mínimo', valor: soloAlerta, pct: soloAlerta / base, color: 'bg-amber-400', texto: 'text-amber-700' },
+    { label: 'Agotados', valor: agotados, pct: agotados / base, color: 'bg-rose-500', texto: 'text-rose-700' },
   ]
 
   return (
@@ -107,9 +96,6 @@ function GraficoEstado({ total, bajo, agotados }: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Feed de actividad reciente
-// ---------------------------------------------------------------------------
 function FeedActividad({ items, loading }: {
   items: ActividadReciente[]; loading: boolean
 }) {
@@ -146,7 +132,6 @@ function FeedActividad({ items, loading }: {
         <ul className="divide-y divide-slate-100">
           {items.map(m => (
             <li key={m.id} className="flex items-center gap-3 py-2.5">
-              {/* Icono de tipo */}
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center
                               flex-shrink-0 ${
                 m.tipo === 'entrada' ? 'bg-teal-50' : 'bg-amber-50'
@@ -156,27 +141,19 @@ function FeedActividad({ items, loading }: {
                   : <ArrowDownCircle size={15} className="text-amber-500" />
                 }
               </div>
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-900 truncate">
-                  {m.insumo}
-                </p>
+                <p className="text-sm font-semibold text-slate-900 truncate">{m.insumo}</p>
                 <p className="text-xs text-slate-400 truncate">
                   {m.usuario}{m.sala ? ` · ${m.sala}` : ''}
                 </p>
               </div>
-
-              {/* Cantidad + tiempo */}
               <div className="text-right flex-shrink-0">
                 <p className={`text-sm font-bold ${
                   m.tipo === 'entrada' ? 'text-teal-600' : 'text-amber-600'
                 }`}>
                   {m.tipo === 'entrada' ? '+' : '-'}{m.cantidad}
                 </p>
-                <p className="text-[10px] text-slate-400">
-                  {tiempoRelativo(m.fecha)}
-                </p>
+                <p className="text-[10px] text-slate-400">{tiempoRelativo(m.fecha)}</p>
               </div>
             </li>
           ))}
@@ -186,9 +163,6 @@ function FeedActividad({ items, loading }: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Top insumos mas retirados
-// ---------------------------------------------------------------------------
 function TopInsumos({ items, loading }: {
   items: TopInsumo[]; loading: boolean
 }) {
@@ -198,8 +172,8 @@ function TopInsumos({ items, loading }: {
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
       <div className="flex items-center gap-2 mb-4">
         <TrendingDown size={15} className="text-amber-500" />
-        <p className="text-sm font-bold text-slate-700">Mas retirados</p>
-        <span className="ml-auto text-xs text-slate-400">ultimos 30 dias</span>
+        <p className="text-sm font-bold text-slate-700">Más retirados</p>
+        <span className="ml-auto text-xs text-slate-400">últimos 30 días</span>
       </div>
 
       {loading ? (
@@ -213,7 +187,7 @@ function TopInsumos({ items, loading }: {
         </div>
       ) : items.length === 0 ? (
         <p className="text-sm text-slate-400 text-center py-8">
-          Sin salidas en los ultimos 30 dias.
+          Sin salidas en los últimos 30 días.
         </p>
       ) : (
         <ol className="space-y-3.5">
@@ -221,24 +195,18 @@ function TopInsumos({ items, loading }: {
             <li key={item.nombre}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2 min-w-0">
-                  {/* Numero de ranking */}
                   <span className={`text-xs font-black w-4 flex-shrink-0 ${
                     idx === 0 ? 'text-amber-500'
                     : idx === 1 ? 'text-slate-400'
                     : idx === 2 ? 'text-amber-700'
                     : 'text-slate-300'
-                  }`}>
-                    {idx + 1}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-700 truncate">
-                    {item.nombre}
-                  </span>
+                  }`}>{idx + 1}</span>
+                  <span className="text-xs font-semibold text-slate-700 truncate">{item.nombre}</span>
                 </div>
                 <span className="text-xs font-bold text-amber-600 flex-shrink-0 ml-2">
                   {item.total_salidas} u.
                 </span>
               </div>
-              {/* Barra proporcional */}
               <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-amber-400 rounded-full transition-all duration-700"
@@ -253,42 +221,33 @@ function TopInsumos({ items, loading }: {
   )
 }
 
-// ---------------------------------------------------------------------------
-// Pagina principal del Dashboard
-// ---------------------------------------------------------------------------
 export function Dashboard() {
-  const [resumen, setResumen]         = useState<ResumenResponse | null>(null)
-  const [alertas, setAlertas]         = useState<InsumoAlerta[]>([])
-  const [semana, setSemana]           = useState<DiaMovimiento[]>([])
-  const [actividad, setActividad]     = useState<ActividadReciente[]>([])
-  const [topInsumos, setTopInsumos]   = useState<TopInsumo[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [chartLoading, setChartLoading]     = useState(true)
-  const [actividadLoading, setActLoading]   = useState(true)
-  const [topLoading, setTopLoading]         = useState(true)
+  const [resumen, setResumen] = useState<ResumenResponse | null>(null)
+  const [alertas, setAlertas] = useState<InsumoAlerta[]>([])
+  const [semana, setSemana] = useState<DiaMovimiento[]>([])
+  const [actividad, setActividad] = useState<ActividadReciente[]>([])
+  const [topInsumos, setTopInsumos] = useState<TopInsumo[]>([])
+  const [loading, setLoading] = useState(true)
+  const [chartLoading, setChartLoading] = useState(true)
+  const [actividadLoading, setActLoading] = useState(true)
+  const [topLoading, setTopLoading] = useState(true)
 
   useEffect(() => {
-    // Metricas + alertas (bloque principal)
     async function loadPrincipal() {
       try {
         const [r, a] = await Promise.all([
           api.get<ResumenResponse>('/resumen/'),
           api.get<InsumoAlerta[]>('/insumos/alertas'),
         ])
-        setResumen(r.data)
-        setAlertas(a.data.slice(0, 5))
+        setResumen(r.data); setAlertas(a.data.slice(0, 5))
       } finally { setLoading(false) }
     }
-
-    // Grafico semanal
     async function loadChart() {
       try {
         const { data } = await api.get<DiaMovimiento[]>('/resumen/grafico-semana')
         setSemana(data)
       } finally { setChartLoading(false) }
     }
-
-    // Feed de actividad reciente
     async function loadActividad() {
       try {
         const { data } = await api.get<ActividadReciente[]>(
@@ -297,8 +256,6 @@ export function Dashboard() {
         setActividad(data)
       } finally { setActLoading(false) }
     }
-
-    // Top insumos retirados
     async function loadTop() {
       try {
         const { data } = await api.get<TopInsumo[]>(
@@ -307,16 +264,11 @@ export function Dashboard() {
         setTopInsumos(data)
       } finally { setTopLoading(false) }
     }
-
-    loadPrincipal()
-    loadChart()
-    loadActividad()
-    loadTop()
+    loadPrincipal(); loadChart(); loadActividad(); loadTop()
   }, [])
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-2xl font-black text-slate-900">Dashboard</h1>
         <p className="text-slate-500 text-sm mt-0.5">
@@ -326,11 +278,8 @@ export function Dashboard() {
         </p>
       </div>
 
-      {/* Metricas */}
       <section className="mb-8">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-          Inventario
-        </h2>
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Inventario</h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           {loading ? (
             Array.from({ length: 6 }).map((_, i) => <MetricCardSkeleton key={i} />)
@@ -357,11 +306,8 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Graficos */}
       <section className="mb-8">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-          Analisis
-        </h2>
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Análisis</h2>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
             <div className="flex items-center justify-between mb-4">
@@ -369,7 +315,7 @@ export function Dashboard() {
               <div className="flex items-center gap-1">
                 <ArrowUpCircle size={12} className="text-teal-500" />
                 <ArrowDownCircle size={12} className="text-amber-400" />
-                <span className="text-xs text-slate-400 ml-1">ultimos 7 dias</span>
+                <span className="text-xs text-slate-400 ml-1">últimos 7 días</span>
               </div>
             </div>
             {chartLoading ? (
@@ -423,24 +369,18 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Feed de actividad + Top insumos */}
       <section className="mb-8">
-        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">
-          Movimientos
-        </h2>
+        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Movimientos</h2>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-          {/* Feed: ocupa 3/5 */}
           <div className="lg:col-span-3">
             <FeedActividad items={actividad} loading={actividadLoading} />
           </div>
-          {/* Top: ocupa 2/5 */}
           <div className="lg:col-span-2">
             <TopInsumos items={topInsumos} loading={topLoading} />
           </div>
         </div>
       </section>
 
-      {/* Alertas de stock */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -460,7 +400,7 @@ export function Dashboard() {
         ) : alertas.length === 0 ? (
           <div className="bg-teal-50 border border-teal-200 rounded-xl p-6 text-center">
             <p className="text-teal-700 font-semibold text-sm">Sin alertas activas</p>
-            <p className="text-teal-600 text-xs mt-1">Todos los insumos estan sobre el minimo.</p>
+            <p className="text-teal-600 text-xs mt-1">Todos los insumos están sobre el mínimo.</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -476,18 +416,18 @@ export function Dashboard() {
                   <div>
                     <p className="text-sm font-bold text-slate-900">{a.nombre}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {a.sala ?? 'Sin sala'} · {a.categoria ?? 'Sin categoria'}
+                      {a.sala ?? 'Sin sala'} · {a.categoria ?? 'Sin categoría'}
                     </p>
                     <div className="flex items-center gap-3 mt-2">
                       <span className="text-xs text-slate-500">
                         Stock: <span className="font-bold text-rose-600">{a.stock_actual}</span>
-                        <span className="text-slate-400"> / min. {a.stock_minimo}</span>
+                        <span className="text-slate-400"> / mín. {a.stock_minimo}</span>
                       </span>
                     </div>
                   </div>
                 </div>
                 <Badge variant={a.stock_actual === 0 ? 'danger' : 'warning'}>
-                  {a.stock_actual === 0 ? 'Agotado' : `Deficit ${a.deficit}`}
+                  {a.stock_actual === 0 ? 'Agotado' : `Déficit ${a.deficit}`}
                 </Badge>
               </div>
             ))}
@@ -495,7 +435,6 @@ export function Dashboard() {
         )}
       </section>
 
-      {/* Pie con totales */}
       {!loading && resumen && (
         <div className="mt-6 pt-6 border-t border-slate-200 flex items-center
                         gap-2 text-xs text-slate-400">

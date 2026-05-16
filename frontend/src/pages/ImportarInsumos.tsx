@@ -23,14 +23,14 @@ const COLUMNAS = ['nombre', 'descripcion', 'stock_actual', 'stock_minimo', 'sala
 const REQUERIDAS = ['nombre', 'stock_actual', 'stock_minimo']
 
 export function ImportarInsumos() {
-  const [estado, setEstado]               = useState<Estado>('idle')
-  const [archivo, setArchivo]             = useState<File | null>(null)
-  const [preview, setPreview]             = useState<string[][]>([])
-  const [codigoTotp, setCodigoTotp]       = useState('')
-  const [resultado, setResultado]         = useState<ImportarResponse | null>(null)
-  const [error, setError]                 = useState<string | null>(null)
-  const [dragOver, setDragOver]           = useState(false)
-  const [segundos, setSegundos]           = useState(30)
+  const [estado, setEstado] = useState<Estado>('idle')
+  const [archivo, setArchivo] = useState<File | null>(null)
+  const [preview, setPreview] = useState<string[][]>([])
+  const [codigoTotp, setCodigoTotp] = useState('')
+  const [resultado, setResultado] = useState<ImportarResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const [segundos, setSegundos] = useState(30)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -81,8 +81,6 @@ export function ImportarInsumos() {
       const form = new FormData()
       form.append('archivo', archivo)
       form.append('codigo_totp', codigoTotp)
-      // IMPORTANTE: NO setear Content-Type manualmente.
-      // Axios lo hace automaticamente con el boundary correcto para multipart/form-data.
       const { data } = await api.post<ImportarResponse>('/importar/insumos', form)
       setResultado(data)
       setEstado('resultado')
@@ -95,21 +93,15 @@ export function ImportarInsumos() {
   }
 
   function reiniciar() {
-    setEstado('idle')
-    setArchivo(null)
-    setPreview([])
-    setCodigoTotp('')
-    setResultado(null)
-    setError(null)
+    setEstado('idle'); setArchivo(null); setPreview([])
+    setCodigoTotp(''); setResultado(null); setError(null)
   }
 
   async function descargarPlantilla() {
     const res = await api.get('/importar/plantilla', { responseType: 'blob' })
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
-    a.href = url
-    a.download = 'plantilla_insumos_hestia.csv'
-    a.click()
+    a.href = url; a.download = 'plantilla_insumos_hestia.csv'; a.click()
     URL.revokeObjectURL(url)
   }
 
@@ -134,7 +126,7 @@ export function ImportarInsumos() {
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-black text-slate-900">Importar insumos</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Carga masiva desde CSV o XLSX. Requiere codigo 2FA.</p>
+            <p className="text-slate-500 text-sm mt-0.5">Carga masiva desde CSV o XLSX. Requiere código 2FA.</p>
           </div>
           <button
             onClick={descargarPlantilla}
@@ -191,7 +183,7 @@ export function ImportarInsumos() {
             ) : (
               <>
                 <Upload size={40} className="mx-auto mb-3 text-slate-400" />
-                <p className="font-semibold text-slate-700">Arrastra tu archivo aqui</p>
+                <p className="font-semibold text-slate-700">Arrastra tu archivo aquí</p>
                 <p className="text-slate-400 text-sm mt-1">o haz clic para buscarlo</p>
                 <p className="text-xs text-slate-300 mt-3">CSV o XLSX</p>
               </>
@@ -240,7 +232,7 @@ export function ImportarInsumos() {
               className="w-full flex items-center justify-center gap-2 bg-teal-600 hover:bg-teal-700
                          text-white font-bold py-3 rounded-xl transition-colors"
             >
-              <Shield size={16} /> Continuar con verificacion 2FA
+              <Shield size={16} /> Continuar con verificación 2FA
             </button>
           )}
         </div>
@@ -253,9 +245,9 @@ export function ImportarInsumos() {
               <Shield size={20} className="text-teal-600" />
             </div>
             <div>
-              <p className="font-bold text-slate-900">Verificacion de seguridad</p>
+              <p className="font-bold text-slate-900">Verificación de seguridad</p>
               <p className="text-slate-500 text-sm">
-                Autoriza la importacion de <strong>{archivo?.name}</strong>.
+                Autoriza la importación de <strong>{archivo?.name}</strong>.
               </p>
             </div>
           </div>
@@ -329,7 +321,7 @@ export function ImportarInsumos() {
                 : <XCircle size={24} className="text-rose-600" />
               }
               <p className="font-black text-slate-900 text-lg">
-                {resultado.importados > 0 ? 'Importacion completada' : 'Sin filas importadas'}
+                {resultado.importados > 0 ? 'Importación completada' : 'Sin filas importadas'}
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">

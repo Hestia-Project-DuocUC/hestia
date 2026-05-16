@@ -9,16 +9,9 @@ import { Badge } from '../components/ui/Badge'
 
 type FiltroEstado = EstadoSolicitud | 'todas' | 'activas'
 
-// ---------------------------------------------------------------------------
-// Helpers de urgencia y display
-// ---------------------------------------------------------------------------
 function urgenciaConfig(sol: SolicitudResponse) {
-  if (sol.estado === 'completada') {
-    return { border: 'border-l-slate-200', chip: null }
-  }
-  if (sol.estado === 'en_preparacion') {
-    return { border: 'border-l-blue-400', chip: null }
-  }
+  if (sol.estado === 'completada') return { border: 'border-l-slate-200', chip: null }
+  if (sol.estado === 'en_preparacion') return { border: 'border-l-blue-400', chip: null }
   const min = sol.minutos_hasta_clase
   if (min < 0) return { border: 'border-l-slate-300', chip: null }
   if (min < 30) return {
@@ -61,13 +54,10 @@ function formatFechaClase(iso: string) {
 
 function estadoBadge(estado: EstadoSolicitud) {
   if (estado === 'completada') return <Badge variant="success">Completada</Badge>
-  if (estado === 'en_preparacion') return <Badge variant="info">En preparacion</Badge>
+  if (estado === 'en_preparacion') return <Badge variant="info">En preparación</Badge>
   return <Badge variant="warning">Pendiente</Badge>
 }
 
-// ---------------------------------------------------------------------------
-// Componente principal
-// ---------------------------------------------------------------------------
 export function SolicitudOperador() {
   const [solicitudes, setSolicitudes] = useState<SolicitudResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,40 +77,28 @@ export function SolicitudOperador() {
     try {
       const { data } = await api.get<SolicitudResponse[]>('/solicitudes/')
       setSolicitudes(data)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }, [])
 
   useEffect(() => { cargar() }, [cargar])
 
-  // ---------------------------------------------------------------------------
-  // Filtrado client-side (la lista no es paginada)
-  // ---------------------------------------------------------------------------
   const filtradas = solicitudes.filter(s => {
     if (filtro === 'todas') return true
-    if (filtro === 'activas') {
-      return s.estado === 'pendiente' || s.estado === 'en_preparacion'
-    }
+    if (filtro === 'activas') return s.estado === 'pendiente' || s.estado === 'en_preparacion'
     return s.estado === filtro
   })
 
-  // ---------------------------------------------------------------------------
-  // Acciones
-  // ---------------------------------------------------------------------------
   async function marcarEnPreparacion(id: number) {
     setAccionando(id)
     try {
       await api.put(`/solicitudes/${id}/en-preparacion`, { notas_operador: null })
-      showToast('Solicitud marcada en preparacion')
+      showToast('Solicitud marcada en preparación')
       cargar()
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
       showToast(detail ?? 'Error al actualizar la solicitud')
-    } finally {
-      setAccionando(null)
-    }
+    } finally { setAccionando(null) }
   }
 
   async function completar(id: number) {
@@ -136,18 +114,11 @@ export function SolicitudOperador() {
       const detail = (err as { response?: { data?: { detail?: string } } })
         .response?.data?.detail
       showToast(detail ?? 'Error al completar el pedido')
-    } finally {
-      setAccionando(null)
-    }
+    } finally { setAccionando(null) }
   }
 
-  // ---------------------------------------------------------------------------
-  // Contadores para los tabs
-  // ---------------------------------------------------------------------------
   const cuentas = {
-    activas: solicitudes.filter(
-      s => s.estado === 'pendiente' || s.estado === 'en_preparacion'
-    ).length,
+    activas: solicitudes.filter(s => s.estado === 'pendiente' || s.estado === 'en_preparacion').length,
     pendientes: solicitudes.filter(s => s.estado === 'pendiente').length,
     en_preparacion: solicitudes.filter(s => s.estado === 'en_preparacion').length,
     completadas: solicitudes.filter(s => s.estado === 'completada').length,
@@ -156,14 +127,11 @@ export function SolicitudOperador() {
   const FILTROS: { key: FiltroEstado; label: string; count?: number }[] = [
     { key: 'activas', label: 'Activas', count: cuentas.activas },
     { key: 'pendientes', label: 'Pendientes', count: cuentas.pendientes },
-    { key: 'en_preparacion', label: 'En preparacion', count: cuentas.en_preparacion },
+    { key: 'en_preparacion', label: 'En preparación', count: cuentas.en_preparacion },
     { key: 'completadas', label: 'Completadas', count: cuentas.completadas },
     { key: 'todas', label: 'Todas' },
   ]
 
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
   return (
     <div className="p-6 max-w-4xl mx-auto">
       {toast && (
@@ -173,7 +141,6 @@ export function SolicitudOperador() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
@@ -184,41 +151,32 @@ export function SolicitudOperador() {
             {loading ? '...' : `${filtradas.length} solicitudes`}
           </p>
         </div>
-        <button
-          onClick={cargar}
+        <button onClick={cargar}
           className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
-                     text-slate-500 hover:bg-slate-50 text-sm transition-colors"
-        >
+                     text-slate-500 hover:bg-slate-50 text-sm transition-colors">
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Actualizar
         </button>
       </div>
 
-      {/* Tabs de filtro */}
       <div className="flex gap-1.5 flex-wrap mb-5">
         {FILTROS.map(f => (
-          <button
-            key={f.key}
-            onClick={() => setFiltro(f.key)}
+          <button key={f.key} onClick={() => setFiltro(f.key)}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
               filtro === f.key
                 ? 'bg-slate-900 text-white'
                 : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
-            }`}
-          >
+            }`}>
             {f.label}
             {f.count !== undefined && (
               <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-black ${
                 filtro === f.key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-600'
-              }`}>
-                {f.count}
-              </span>
+              }`}>{f.count}</span>
             )}
           </button>
         ))}
       </div>
 
-      {/* Lista de solicitudes */}
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -233,7 +191,7 @@ export function SolicitudOperador() {
         <div className="bg-white rounded-xl border border-slate-200 p-10 text-center">
           <ClipboardList size={28} className="mx-auto mb-2 text-slate-300" />
           <p className="text-sm font-semibold text-slate-400">
-            No hay solicitudes en esta categoria.
+            No hay solicitudes en esta categoría.
           </p>
         </div>
       ) : (
@@ -244,12 +202,9 @@ export function SolicitudOperador() {
             const estaExpandido = expandido === sol.id
 
             return (
-              <div
-                key={sol.id}
+              <div key={sol.id}
                 className={`bg-white rounded-xl border border-slate-200 border-l-4
-                             shadow-sm overflow-hidden ${border}`}
-              >
-                {/* Cabecera */}
+                             shadow-sm overflow-hidden ${border}`}>
                 <div className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
@@ -257,9 +212,7 @@ export function SolicitudOperador() {
                         {estadoBadge(sol.estado)}
                         {chip}
                       </div>
-                      <p className="text-base font-bold text-slate-900">
-                        {sol.docente_nombre}
-                      </p>
+                      <p className="text-base font-bold text-slate-900">{sol.docente_nombre}</p>
                       <p className="text-sm text-slate-500">
                         {sol.sala_nombre}{' '}
                         <span className="text-slate-300">·</span>{' '}
@@ -269,42 +222,30 @@ export function SolicitudOperador() {
                     <button
                       onClick={() => setExpandido(estaExpandido ? null : sol.id)}
                       className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100
-                                 transition-colors flex-shrink-0"
-                    >
-                      {estaExpandido
-                        ? <ChevronUp size={16} />
-                        : <ChevronDown size={16} />}
+                                 transition-colors flex-shrink-0">
+                      {estaExpandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Items (siempre visible para activas, expandible para completadas) */}
                 {(estaExpandido || sol.estado !== 'completada') && (
                   <div className="px-5 pb-1 border-t border-slate-100">
                     <ul className="mt-3 space-y-1.5 mb-3">
                       {sol.items.map(item => (
-                        <li key={item.id}
-                          className="flex items-center gap-2 text-sm">
+                        <li key={item.id} className="flex items-center gap-2 text-sm">
                           <Package size={12} className="text-slate-300 flex-shrink-0" />
-                          <span className="flex-1 text-slate-700 truncate">
-                            {item.insumo_nombre}
-                          </span>
-                          <span className="font-bold text-slate-900">
-                            x{item.cantidad_solicitada}
-                          </span>
+                          <span className="flex-1 text-slate-700 truncate">{item.insumo_nombre}</span>
+                          <span className="font-bold text-slate-900">x{item.cantidad_solicitada}</span>
                         </li>
                       ))}
                     </ul>
-
                     {sol.notas && (
-                      <p className="text-xs text-slate-500 bg-slate-50 rounded-lg
-                                    px-3 py-2 mb-3">
+                      <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2 mb-3">
                         <strong>Docente:</strong> {sol.notas}
                       </p>
                     )}
                     {sol.notas_operador && (
-                      <p className="text-xs text-teal-700 bg-teal-50 rounded-lg
-                                    px-3 py-2 mb-3">
+                      <p className="text-xs text-teal-700 bg-teal-50 rounded-lg px-3 py-2 mb-3">
                         <strong>Operador:</strong> {sol.notas_operador}
                       </p>
                     )}
@@ -316,17 +257,14 @@ export function SolicitudOperador() {
                   </div>
                 )}
 
-                {/* Acciones */}
                 {sol.estado === 'pendiente' && (
                   <div className="px-5 pb-4">
-                    <button
-                      onClick={() => marcarEnPreparacion(sol.id)}
+                    <button onClick={() => marcarEnPreparacion(sol.id)}
                       disabled={accionando === sol.id}
                       className="flex items-center gap-2 px-4 py-2 rounded-xl
                                  bg-blue-600 hover:bg-blue-700 text-white text-sm
-                                 font-bold transition-colors disabled:opacity-50"
-                    >
-                      {accionando === sol.id ? 'Actualizando...' : 'Marcar en preparacion'}
+                                 font-bold transition-colors disabled:opacity-50">
+                      {accionando === sol.id ? 'Actualizando...' : 'Marcar en preparación'}
                     </button>
                   </div>
                 )}
@@ -334,22 +272,17 @@ export function SolicitudOperador() {
                 {sol.estado === 'en_preparacion' && (
                   <div className="px-5 pb-4">
                     {!estaCompletando ? (
-                      <button
-                        onClick={() => setCompletandoId(sol.id)}
+                      <button onClick={() => setCompletandoId(sol.id)}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl
                                    bg-teal-600 hover:bg-teal-700 text-white text-sm
-                                   font-bold transition-colors"
-                      >
+                                   font-bold transition-colors">
                         Completar pedido
                       </button>
                     ) : (
                       <div className="space-y-2">
-                        <textarea
-                          rows={2}
+                        <textarea rows={2}
                           value={notasMap[sol.id] ?? ''}
-                          onChange={e => setNotasMap(prev => ({
-                            ...prev, [sol.id]: e.target.value,
-                          }))}
+                          onChange={e => setNotasMap(prev => ({ ...prev, [sol.id]: e.target.value }))}
                           placeholder="Notas del operador (opcional)..."
                           className="w-full px-3 py-2 rounded-lg border border-slate-200
                                      text-sm focus:outline-none focus:ring-2
@@ -357,26 +290,17 @@ export function SolicitudOperador() {
                                      resize-none bg-slate-50 focus:bg-white"
                         />
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => setCompletandoId(null)}
+                          <button onClick={() => setCompletandoId(null)}
                             className="px-3 py-2 rounded-xl border border-slate-200
                                        text-slate-600 text-sm font-bold
-                                       hover:bg-slate-50 transition-colors"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            onClick={() => completar(sol.id)}
+                                       hover:bg-slate-50 transition-colors">Cancelar</button>
+                          <button onClick={() => completar(sol.id)}
                             disabled={accionando === sol.id}
                             className="flex items-center gap-2 px-4 py-2 rounded-xl
                                        bg-teal-600 hover:bg-teal-700 text-white
-                                       text-sm font-bold transition-colors
-                                       disabled:opacity-50"
-                          >
+                                       text-sm font-bold transition-colors disabled:opacity-50">
                             <CheckCircle size={14} />
-                            {accionando === sol.id
-                              ? 'Completando...'
-                              : 'Confirmar despacho'}
+                            {accionando === sol.id ? 'Completando...' : 'Confirmar despacho'}
                           </button>
                         </div>
                       </div>
