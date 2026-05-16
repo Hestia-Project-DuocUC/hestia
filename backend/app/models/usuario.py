@@ -5,20 +5,20 @@ import enum
 
 
 class RolUsuario(str, enum.Enum):
-    admin    = "admin"
+    admin = "admin"
     operador = "operador"
-    visor    = "visor"
-    docente  = "docente"  # Puede crear solicitudes de retiro de insumos
+    visor = "visor"
+    docente = "docente"  # Puede crear solicitudes de retiro de insumos
 
 
 class Usuario(Base):
     __tablename__ = "usuarios"
 
-    id            = Column(Integer, primary_key=True, index=True)
-    nombre        = Column(String, nullable=False)
-    email         = Column(String, unique=True, nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String, nullable=False)
+    email = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)
-    rol           = Column(Enum(RolUsuario), default=RolUsuario.visor)
+    rol = Column(Enum(RolUsuario), default=RolUsuario.visor)
 
     # Soft-delete: una cuenta inactiva no puede iniciar sesion, pero su fila
     # se conserva para no romper la trazabilidad de movimientos historicos
@@ -30,12 +30,12 @@ class Usuario(Base):
     avatar_b64 = Column(Text, nullable=True)
 
     # 2FA TOTP
-    totp_secret       = Column(String, nullable=True)
-    totp_habilitado   = Column(Boolean, default=False, nullable=False)
+    totp_secret = Column(String, nullable=True)
+    totp_habilitado = Column(Boolean, default=False, nullable=False)
 
     # Codigos de recuperacion: JSON list de {"hash": str, "usado": bool}
     # Los hashes son SHA-256 de los codigos en texto plano.
     totp_recovery_codes = Column(Text, nullable=True)
 
-    movimientos         = relationship("Movimiento",       back_populates="usuario")
-    solicitudes_retiro  = relationship("SolicitudRetiro",  back_populates="docente")
+    movimientos = relationship("Movimiento", back_populates="usuario")
+    solicitudes_retiro = relationship("SolicitudRetiro", back_populates="docente")
