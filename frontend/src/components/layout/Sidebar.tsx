@@ -3,13 +3,15 @@ import {
   LayoutDashboard, AlertTriangle, Package,
   ArrowLeftRight, DoorOpen, Tag,
   LogOut, ShieldCheck, Upload,
-  UserCircle, Users, ScrollText
+  UserCircle, Users, ScrollText, ClipboardList
 } from 'lucide-react'
 import { useAuthStore } from '../../store/auth'
 import { Logo } from '../ui/Logo'
 
+// Cada item define en que roles es visible.
+// El rol 'docente' solo ve Solicitudes; el resto no cambia.
 const NAV_ITEMS = [
-  // Seccion principal
+  // Seccion principal (admin, operador, visor)
   { to: '/dashboard',   icon: LayoutDashboard, label: 'Dashboard',   roles: ['admin', 'operador', 'visor'] },
   { to: '/alertas',     icon: AlertTriangle,   label: 'Alertas',     roles: ['admin', 'operador', 'visor'] },
   { to: '/insumos',     icon: Package,         label: 'Insumos',     roles: ['admin', 'operador', 'visor'] },
@@ -19,13 +21,17 @@ const NAV_ITEMS = [
   { to: '/categorias',  icon: Tag,             label: 'Categorias',  roles: ['admin', 'operador', 'visor'] },
   // Seccion operaciones
   { to: '/importar',    icon: Upload,          label: 'Importar',    roles: ['admin'], divider: true },
-  // Seccion administracion (solo admin)
+  // Seccion administracion
   { to: '/usuarios',    icon: Users,           label: 'Usuarios',    roles: ['admin'], divider: true },
   { to: '/audit-log',   icon: ScrollText,      label: 'Audit Log',   roles: ['admin'] },
+  // Flujo docente: solo retiro de insumos
+  { to: '/solicitudes', icon: ClipboardList,   label: 'Retiro de insumos', roles: ['docente'] },
+  // Operador/admin tambien gestiona solicitudes (Bloque 4)
+  { to: '/solicitudes', icon: ClipboardList,   label: 'Solicitudes', roles: ['operador'], divider: true },
 ]
 
 export function Sidebar() {
-  const { logout } = useAuthStore()
+  const { logout, user } = useAuthStore()
   const navigate = useNavigate()
 
   function handleLogout() { logout(); navigate('/login') }
@@ -39,7 +45,6 @@ export function Sidebar() {
     }
   `
 
-  const { user } = useAuthStore()
   const itemsVisibles = NAV_ITEMS.filter(
     item => user?.rol && item.roles.includes(user.rol)
   )
@@ -49,18 +54,20 @@ export function Sidebar() {
       {/* Logo */}
       <div className="px-5 pt-7 pb-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
-          <Logo className="w-12 h-12"/>
+          <Logo className="w-12 h-12" />
           <div>
             <p className="text-white font-bold text-base leading-tight">Hestia</p>
-            <p className="text-slate-400 text-xs">Escuela de Salud</p>
+            <p className="text-slate-400 text-xs">
+              {user?.rol === 'docente' ? 'Docente' : 'Escuela de Salud'}
+            </p>
           </div>
         </div>
       </div>
 
       {/* Navegacion */}
       <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
-        {itemsVisibles.map(({ to, icon: Icon, label, divider }) => (
-          <div key={to}>
+        {itemsVisibles.map(({ to, icon: Icon, label, divider }, idx) => (
+          <div key={`${to}-${idx}`}>
             {divider && <div className="border-t border-slate-800 my-2" />}
             <NavLink to={to} className={navLinkCls}>
               <Icon size={17} />
@@ -70,7 +77,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      {/* Pie: perfil, seguridad, logout */}
+      {/* Pie: perfil, seguridad, logout (todos los roles) */}
       <div className="px-3 pb-5 border-t border-slate-800 pt-4 space-y-1">
         <NavLink to="/perfil" className={navLinkCls}>
           <UserCircle size={17} />
@@ -80,10 +87,12 @@ export function Sidebar() {
           <ShieldCheck size={17} />
           Seguridad
         </NavLink>
-        <button onClick={handleLogout}
+        <button
+          onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400
                      hover:bg-slate-800 hover:text-rose-400 text-sm font-semibold
-                     transition-colors duration-150">
+                     transition-colors duration-150"
+        >
           <LogOut size={17} /> Cerrar sesion
         </button>
       </div>

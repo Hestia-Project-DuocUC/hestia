@@ -11,6 +11,7 @@ import { ImportarInsumos }  from './pages/ImportarInsumos'
 import { Perfil }           from './pages/Perfil'
 import { Usuarios }         from './pages/Usuarios'
 import { AuditLog }         from './pages/AuditLog'
+import { SolicitudDocente } from './pages/SolicitudDocente'
 import { Layout }           from './components/layout/Layout'
 
 export function App() {
@@ -31,6 +32,7 @@ export function App() {
           <Route path="perfil"      element={<Perfil />} />
           <Route path="usuarios"    element={<Usuarios />} />
           <Route path="audit-log"   element={<AuditLog />} />
+          <Route path="solicitudes" element={<SolicitudDocente />} />
         </Route>
       </Routes>
     </BrowserRouter>

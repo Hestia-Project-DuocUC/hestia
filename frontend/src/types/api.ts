@@ -145,3 +145,33 @@ export interface PaginatedResponse<T> {
   limit: number
   data: T[]
 }
+
+// ---------------------------------------------------------------------------
+// Solicitudes de retiro (flujo docente)
+// ---------------------------------------------------------------------------
+
+export type EstadoSolicitud = 'pendiente' | 'en_preparacion' | 'completada'
+
+export interface SolicitudItemResponse {
+  id: number
+  insumo_id: number
+  insumo_nombre: string
+  stock_actual: number
+  cantidad_solicitada: number
+}
+
+export interface SolicitudResponse {
+  id: number
+  docente_id: number
+  docente_nombre: string
+  sala_id: number
+  sala_nombre: string
+  fecha_clase: string
+  estado: EstadoSolicitud
+  notas: string | null
+  notas_operador: string | null
+  fecha_creacion: string
+  fecha_completada: string | null
+  items: SolicitudItemResponse[]
+  minutos_hasta_clase: number
+}
