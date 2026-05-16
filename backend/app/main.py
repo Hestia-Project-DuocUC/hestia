@@ -6,13 +6,14 @@ from app.database import Base, engine, aplicar_migraciones_pendientes
 # create_all() necesita conocer TODOS los modelos antes de ejecutarse.
 from app.models import sala, categoria, usuario, movimiento, insumo  # noqa
 from app.models import audit_log  # noqa
+from app.models import solicitud   # noqa  <- SolicitudRetiro y SolicitudItem
 from app.routes import (
     salas, categorias, usuarios, movimientos, insumos, auth, resumen, importar
 )
 from app.routes import audit_log as audit_log_routes
 
-# 1) crea tablas que no existen. 2) aplica ALTER TABLE idempotentes para
-# columnas agregadas a tablas ya existentes (ver database.py).
+# 1) crea tablas que no existen. 2) aplica ALTER TABLE / ALTER TYPE idempotentes
+# para columnas y valores de enum agregados a tablas ya existentes.
 Base.metadata.create_all(bind=engine)
 aplicar_migraciones_pendientes()
 
@@ -26,13 +27,6 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # Security Headers Middleware
 # ---------------------------------------------------------------------------
-# X-Content-Type-Options: nosniff     -> evita MIME sniffing
-# X-Frame-Options: DENY               -> evita clickjacking via iframe
-# X-XSS-Protection: 1; mode=block    -> filtro XSS en navegadores viejos
-# Referrer-Policy                     -> no filtra URL completa al navegar
-# Permissions-Policy                  -> deshabilita camara/mic/geolocalizacion
-# ---------------------------------------------------------------------------
-
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -61,6 +55,7 @@ app.include_router(auth.router)
 app.include_router(resumen.router)
 app.include_router(importar.router)
 app.include_router(audit_log_routes.router)
+# Bloque 2 agregara: app.include_router(solicitudes.router)
 
 
 @app.get("/")
