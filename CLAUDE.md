@@ -66,12 +66,14 @@ backend/
 │   │   ├── categoria.py
 │   │   ├── insumo.py
 │   │   ├── movimiento.py
+│   │   ├── solicitud.py   # SolicitudRetiro + SolicitudItem
 │   │   └── audit_log.py
 │   ├── schemas/           # Pydantic v2
 │   │   ├── comun.py       # PaginatedResponse[T]
 │   │   ├── usuario.py
 │   │   ├── insumo.py
 │   │   ├── movimiento.py
+│   │   ├── solicitud.py   # SolicitudCreate, SolicitudResponse, etc.
 │   │   ├── sala.py
 │   │   ├── categoria.py
 │   │   └── audit_log.py
@@ -80,6 +82,7 @@ backend/
 │   │   ├── usuarios.py    # /usuarios
 │   │   ├── insumos.py     # /insumos
 │   │   ├── movimientos.py # /movimientos
+│   │   ├── solicitudes.py # /solicitudes
 │   │   ├── salas.py       # /salas
 │   │   ├── categorias.py  # /categorias
 │   │   ├── resumen.py     # /resumen
@@ -91,6 +94,7 @@ backend/
 │       ├── rate_limit.py  # rate limiter en memoria
 │       └── auditoria.py   # helper registrar() y get_ip()
 ├── seed_demo.py           # script de carga de datos de demo
+├── crear_admin.py         # crea usuario admin inicial (entrypoint Docker)
 ├── .env                   # variables de entorno (NO en git)
 ├── .flake8                # config linter
 └── requirements.txt
@@ -100,9 +104,11 @@ backend/
 
 **`Usuario`** (`usuarios`)
 ```
-id · nombre · email (unique) · password_hash · rol (Enum: admin|operador|visor)
+id · nombre · email (unique) · password_hash · rol (Enum: admin|operador|visor|docente)
 totp_secret · totp_habilitado · totp_recovery_codes (JSON Text)
-Relaciones: movimientos →
+foto_perfil (Text, base64 PNG 256×256, nullable)
+activo (Boolean, default True — soft-delete)
+Relaciones: movimientos → · solicitudes →
 ```
 
 **`Sala`** (`salas`)
@@ -132,6 +138,24 @@ insumo_id (FK) · usuario_id (FK)
 Relaciones: insumo ← · usuario ←
 ```
 
+**`SolicitudRetiro`** (`solicitudes_retiro`)
+```
+id · docente_id (FK usuarios) · sala_id (FK salas)
+fecha_clase (DateTime timezone=True) · estado (Enum: pendiente|en_preparacion|completada)
+notas (Text nullable) · notas_operador (Text nullable)
+fecha_creacion (DateTime timezone=True, server_default=now())
+fecha_completada (DateTime timezone=True, nullable)
+Relaciones: docente ← · sala ← · items →
+```
+
+**`SolicitudItem`** (`solicitud_items`)
+```
+id · solicitud_id (FK solicitudes_retiro, cascade delete) · insumo_id (FK insumos)
+cantidad_solicitada (Integer)
+Relaciones: solicitud ← · insumo ←
+```
+El stock se descuenta al completar la solicitud (no al crearla). Los items son inmutables tras la creación.
+
 **`AuditLog`** (`audit_log`)
 ```
 id · fecha (DateTime timezone=True, server_default=now())
@@ -147,6 +171,7 @@ En `main.py`, todos los modelos se importan explícitamente antes de `Base.metad
 ```python
 from app.models import sala, categoria, usuario, movimiento, insumo  # noqa
 from app.models import audit_log  # noqa
+from app.models import solicitud  # noqa
 ```
 **Regla:** al agregar un modelo nuevo, importarlo en `main.py` antes de `create_all()`.
 
@@ -188,16 +213,32 @@ DELETE /insumos/{id}             → 200 (admin + TOTP requerido)
 
 **`/movimientos`**
 ```
-GET  /movimientos/                 → PaginatedResponse[MovimientoEnriquecido]
-POST /movimientos/                 → 200 (actualiza stock_actual del insumo)
+GET  /movimientos/exportar         → StreamingResponse CSV o XLSX (filtros: insumo, tipo, fecha_desde, fecha_hasta)
+GET  /movimientos/                 → PaginatedResponse[MovimientoEnriquecido] (mismos filtros)
+POST /movimientos/                 → MovimientoResponse (operador+; actualiza stock_actual con SELECT FOR UPDATE)
+GET  /movimientos/insumo/{id}      → PaginatedResponse[MovimientoEnriquecido]
+GET  /movimientos/sala/{id}        → PaginatedResponse[MovimientoEnriquecido]
+```
+
+**`/solicitudes`** — flujo docente → operador
+```
+GET  /solicitudes/resumen-recientes → {total, pendientes} (operador+; para pop-up de bienvenida)
+GET  /solicitudes/mis-solicitudes   → list[SolicitudResponse] (solo docente)
+GET  /solicitudes/                  → list[SolicitudResponse] (operador+; filtro opcional ?estado=)
+POST /solicitudes/                  → SolicitudResponse 201 (solo docente; valida stock pero NO descuenta)
+PUT  /solicitudes/{id}/en-preparacion → SolicitudResponse (operador+)
+POST /solicitudes/{id}/completar    → SolicitudResponse (operador+; descuenta stock con SELECT FOR UPDATE)
 ```
 
 **`/salas`** · **`/categorias`**: CRUD estándar.
 
 **`/resumen`**
 ```
-GET  /resumen/              → ResumenResponse (total_insumos, insumos_bajo_stock, insumos_agotados, movimientos_hoy, entradas_hoy, salidas_hoy, total_salas, total_usuarios)
-GET  /resumen/grafico-semana → list[DiaMovimiento] — 7 elementos con fecha/entradas/salidas, rellena días sin actividad con 0
+GET  /resumen/                   → ResumenResponse (total_insumos, insumos_bajo_stock, insumos_agotados,
+                                   movimientos_hoy, entradas_hoy, salidas_hoy, total_salas, total_usuarios)
+GET  /resumen/grafico-semana     → list[DiaMovimiento] — 7 elementos con fecha/entradas/salidas
+GET  /resumen/actividad-reciente → list[ActividadReciente] — últimos movimientos para feed del dashboard
+GET  /resumen/top-insumos-retirados → list[TopInsumo] — insumos más retirados (últimos 30 días)
 ```
 
 **`/importar`**
@@ -214,6 +255,7 @@ GET  /audit-log/                   → PaginatedResponse[AuditLogResponse] ?acci
 
 ```python
 get_usuario_actual  # cualquier JWT válido (rechaza pre_tokens de 2FA)
+require_docente     # solo docente
 require_operador    # admin u operador
 require_admin       # solo admin
 ```
@@ -255,15 +297,17 @@ frontend/src/
 │   └── api.ts             # Interfaces TS sincronizadas con schemas Pydantic
 ├── pages/                 # 1 archivo = 1 ruta
 │   ├── Login.tsx
-│   ├── Dashboard.tsx      # métricas + gráficos SVG/CSS + alertas top 5
-│   ├── Alertas.tsx        # tabs Activas/Resueltas + selector 7/14/30 días
-│   ├── Insumos.tsx        # tabla filtrable + CRUD + exportar CSV
-│   ├── Movimientos.tsx    # tabla paginada + registrar movimiento
+│   ├── Dashboard.tsx         # métricas + gráfico semanal + feed actividad + top insumos
+│   ├── Alertas.tsx           # tabs Activas/Resueltas + selector 7/14/30 días
+│   ├── Insumos.tsx           # tabla filtrable + CRUD + exportar CSV + autocompletado
+│   ├── Movimientos.tsx       # tabla paginada + filtros + exportar CSV/XLSX
+│   ├── SolicitudDocente.tsx  # carrito de retiro + historial (solo docente)
+│   ├── SolicitudOperador.tsx # gestión de solicitudes pendientes (operador+)
 │   ├── Salas.tsx
 │   ├── Categorias.tsx
 │   ├── Configuracion2FA.tsx  # setup QR, activar, desactivar, recovery codes
 │   ├── ImportarInsumos.tsx   # upload CSV/XLSX con TOTP
-│   ├── Perfil.tsx            # info usuario + cambiar contraseña
+│   ├── Perfil.tsx            # info usuario + foto de perfil + cambiar contraseña
 │   ├── Usuarios.tsx          # CRUD usuarios + reset 2FA (solo admin)
 │   └── AuditLog.tsx          # tabla paginada + filtro por acción (solo admin)
 └── components/
@@ -271,29 +315,32 @@ frontend/src/
     │   ├── Layout.tsx     # outlet + guard JWT + aviso 2FA
     │   └── Sidebar.tsx    # nav por rol + footer perfil/seguridad/logout
     └── ui/
-        ├── Badge.tsx      # variants: default|warning|danger|success|info
-        ├── Card.tsx       # MetricCard
-        ├── Logo.tsx       # prop light=true para fondos oscuros (sidebar)
-        ├── Modal.tsx      # size: sm|md|lg
-        └── Skeleton.tsx   # Skeleton, MetricCardSkeleton, TableRowSkeleton, AlertaCardSkeleton
+        ├── Badge.tsx           # variants: default|warning|danger|success|info
+        ├── Card.tsx            # MetricCard
+        ├── Logo.tsx            # prop light=true para fondos oscuros (sidebar)
+        ├── Modal.tsx           # size: sm|md|lg
+        ├── SearchSuggestions.tsx  # dropdown de autocompletado (Insumos, Movimientos)
+        └── Skeleton.tsx        # Skeleton, MetricCardSkeleton, TableRowSkeleton, AlertaCardSkeleton
 ```
 
 ### 4.2 Rutas
 
 ```tsx
-/login             → <Login />          (pública)
-/                  → redirect /dashboard (protegida por Layout)
+/login             → <Login />                (pública)
+/                  → redirect /dashboard      (protegida por Layout)
 /dashboard         → <Dashboard />
 /alertas           → <Alertas />
 /insumos           → <Insumos />
 /movimientos       → <Movimientos />
+/solicitudes       → <SolicitudDocente />     (visible solo docente en sidebar)
+/solicitudes/admin → <SolicitudOperador />    (visible solo operador+admin en sidebar)
 /salas             → <Salas />
 /categorias        → <Categorias />
 /seguridad         → <Configuracion2FA />
-/importar          → <ImportarInsumos />
+/importar          → <ImportarInsumos />      (visible solo admin en sidebar)
 /perfil            → <Perfil />
-/usuarios          → <Usuarios />       (visible solo admin en sidebar)
-/audit-log         → <AuditLog />       (visible solo admin en sidebar)
+/usuarios          → <Usuarios />             (visible solo admin en sidebar)
+/audit-log         → <AuditLog />             (visible solo admin en sidebar)
 ```
 
 ### 4.3 Proxy de Vite — regla crítica
@@ -309,6 +356,7 @@ proxy: {
   '/categorias':  API,
   '/usuarios':    API,
   '/movimientos': API,
+  '/solicitudes': API,
   '/audit-log':   API,
 }
 ```
@@ -392,15 +440,19 @@ No hay CI para el frontend (TypeScript, ESLint o build check). El build de Vite 
 | Inventario | Alertas stock mínimo (activas + resueltas) | ✅ |
 | Inventario | Exportación CSV con filtros | ✅ |
 | Inventario | Importación masiva CSV/XLSX con TOTP | ✅ |
-| Movimientos | Registro entrada/salida + listado paginado | ✅ |
+| Inventario | Autocompletado en búsqueda de insumos | ✅ |
+| Movimientos | Registro entrada/salida + listado paginado + filtros | ✅ |
+| Movimientos | Exportación CSV/XLSX con filtros | ✅ |
+| Solicitudes | Flujo docente → operador (carrito + historial + gestión) | ✅ |
+| Solicitudes | Descuento de stock con bloqueo pesimista (SELECT FOR UPDATE) | ✅ |
 | Auth | Login + JWT + TOTP 2FA + recovery codes | ✅ |
 | Auth | Rate limiting (5 intentos, 15 min bloqueo) | ✅ |
 | Auth | Security headers HTTP | ✅ |
-| Usuarios | RBAC admin/operador/visor | ✅ |
+| Usuarios | RBAC admin/operador/visor/docente | ✅ |
 | Usuarios | CRUD desde UI (solo admin) | ✅ |
-| Usuarios | Perfil + cambiar contraseña | ✅ |
+| Usuarios | Perfil + foto de perfil + cambiar contraseña | ✅ |
 | Usuarios | Reset 2FA desde admin | ✅ |
-| Dashboard | Métricas + gráfico semanal + estado inventario | ✅ |
+| Dashboard | Métricas + gráfico semanal + feed actividad + top insumos | ✅ |
 | Audit log | Registro de acciones (login, CRUD usuarios) | ✅ parcial |
 | Salas | CRUD | ✅ |
 | Categorías | CRUD | ✅ |
@@ -410,7 +462,6 @@ No hay CI para el frontend (TypeScript, ESLint o build check). El build de Vite 
 | Funcionalidad | Dependencias | Complejidad |
 |---|---|---|
 | Audit log en insumos y movimientos | — | Baja |
-| Exportación CSV de movimientos | — | Baja |
 | Predicción de desabastecimiento | Datos históricos suficientes | Media |
 | Clasificación ABC de inventario | — | Media |
 | Campo `fecha_vencimiento` en insumos | Migración Alembic + refactor UI | Alta |

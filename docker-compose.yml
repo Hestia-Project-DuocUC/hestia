@@ -41,6 +41,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    restart: unless-stopped
     volumes:
       - ./backend:/app
 
@@ -57,6 +58,7 @@ services:
       - API_URL=http://api:8000
     depends_on:
       - api
+    restart: unless-stopped
     volumes:
       - ./frontend:/app
       # Volumen anonimo para node_modules: evita que la carpeta local

@@ -35,7 +35,12 @@ def get_usuario_actual(
     if usuario_id is None:
         raise excepcion
 
-    usuario = db.query(Usuario).filter(Usuario.id == int(usuario_id)).first()
+    try:
+        uid = int(usuario_id)
+    except (ValueError, TypeError):
+        raise excepcion
+
+    usuario = db.query(Usuario).filter(Usuario.id == uid).first()
     if usuario is None:
         raise excepcion
     if not usuario.activo:

@@ -80,6 +80,7 @@ export function SolicitudDocente() {
   useEffect(() => {
     api.get<PaginatedResponse<SalaResponse>>('/salas/', { params: { limit: 200 } })
       .then(({ data }) => setSalas(data.data))
+      .catch(() => showToast('No se pudieron cargar las salas. Recarga la página.'))
   }, [])
 
   const cargarHistorial = useCallback(async () => {
@@ -87,6 +88,8 @@ export function SolicitudDocente() {
     try {
       const { data } = await api.get<SolicitudResponse[]>('/solicitudes/mis-solicitudes')
       setHistorial(data)
+    } catch {
+      showToast('Error al cargar el historial de solicitudes.')
     } finally { setLoadingHistorial(false) }
   }, [])
 

@@ -24,7 +24,7 @@ Thread-safety:
 
 import threading
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 
@@ -47,7 +47,7 @@ def verificar_limite(email: str) -> None:
     Llamar ANTES de validar credenciales.
     """
     clave = _clave(email)
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc)
 
     with _lock:
         # 1. Chequear bloqueo activo
@@ -88,7 +88,7 @@ def verificar_limite(email: str) -> None:
 def registrar_fallo(email: str) -> None:
     """Registra un intento fallido. Llamar cuando las credenciales son incorrectas."""
     clave = _clave(email)
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc)
     with _lock:
         _intentos[clave].append(ahora)
 
@@ -106,7 +106,7 @@ def intentos_restantes(email: str) -> int:
     Llamar despues de registrar_fallo().
     """
     clave = _clave(email)
-    ahora = datetime.utcnow()
+    ahora = datetime.now(timezone.utc)
     with _lock:
         ventana_inicio = ahora - timedelta(seconds=VENTANA_SEG)
         recientes = [t for t in _intentos[clave] if t > ventana_inicio]

@@ -77,6 +77,8 @@ export function SolicitudOperador() {
     try {
       const { data } = await api.get<SolicitudResponse[]>('/solicitudes/')
       setSolicitudes(data)
+    } catch {
+      showToast('Error al cargar las solicitudes. Verifica la conexión.')
     } finally { setLoading(false) }
   }, [])
 
