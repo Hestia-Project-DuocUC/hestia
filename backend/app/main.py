@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -18,10 +19,16 @@ from app.routes import solicitudes
 Base.metadata.create_all(bind=engine)
 aplicar_migraciones_pendientes()
 
+# /docs y /redoc solo se habilitan si DOCS_HABILITADOS=true en el entorno.
+# En produccion debe quedar en false (valor por defecto).
+_docs_habilitados = os.getenv("DOCS_HABILITADOS", "false").lower() == "true"
+
 app = FastAPI(
     title="Hestia",
     description="Sistema de gestion de insumos - DuocUC",
     version="0.1.0",
+    docs_url="/docs" if _docs_habilitados else None,
+    redoc_url="/redoc" if _docs_habilitados else None,
 )
 
 

@@ -19,6 +19,9 @@ router = APIRouter(prefix="/importar", tags=["Importacion"])
 TOTP_VALID_WINDOW = 1
 COLUMNAS_REQUERIDAS = {"nombre", "stock_actual", "stock_minimo"}
 
+# Caracteres que inician formulas en Excel/Calc (CSV Formula Injection).
+_FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
 
 class ErrorFila(BaseModel):
     fila: int
@@ -34,6 +37,13 @@ class ImportarResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def _sanitizar_texto(valor: str) -> str:
+    """Elimina prefijos de formula para prevenir CSV/Formula Injection."""
+    while valor and valor[0] in _FORMULA_PREFIXES:
+        valor = valor[1:].strip()
+    return valor
+
 
 def _verificar_totp(usuario: Usuario, codigo: str) -> None:
     """Lanza error si el codigo TOTP no es valido o 2FA no esta habilitado."""
@@ -140,7 +150,7 @@ def _procesar_filas(
 
     # start=2 porque la fila 1 es el encabezado del CSV
     for idx, fila in enumerate(filas, start=2):
-        nombre = fila.get("nombre", "").strip()
+        nombre = _sanitizar_texto(fila.get("nombre", "").strip())
         if not nombre:
             errores.append(ErrorFila(fila=idx, razon="Campo 'nombre' vacio o ausente."))
             continue
@@ -172,12 +182,16 @@ def _procesar_filas(
             ))
             continue
 
-        sala_id = _buscar_o_crear_sala(fila.get("sala", ""), db)
-        categoria_id = _buscar_o_crear_categoria(fila.get("categoria", ""), db)
+        sala_nombre = _sanitizar_texto(fila.get("sala", "").strip())
+        categoria_nombre = _sanitizar_texto(fila.get("categoria", "").strip())
+        descripcion_raw = _sanitizar_texto((fila.get("descripcion", "") or "").strip())
+
+        sala_id = _buscar_o_crear_sala(sala_nombre, db)
+        categoria_id = _buscar_o_crear_categoria(categoria_nombre, db)
 
         insumo = Insumo(
             nombre=nombre,
-            descripcion=fila.get("descripcion", "") or None,
+            descripcion=descripcion_raw or None,
             stock_actual=stock_actual,
             stock_minimo=stock_minimo,
             sala_id=sala_id,

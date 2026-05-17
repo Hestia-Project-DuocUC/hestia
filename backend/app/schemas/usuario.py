@@ -1,6 +1,24 @@
+import re
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, field_validator
 from app.models.usuario import RolUsuario
+
+_PASSWORD_REGLAS = [
+    (r'[A-Z]', "al menos una letra mayuscula"),
+    (r'[a-z]', "al menos una letra minuscula"),
+    (r'\d', "al menos un numero"),
+    (r'[^a-zA-Z0-9]', "al menos un caracter especial (!@#$%, etc.)"),
+]
+
+
+def _validar_complejidad_password(v: str) -> str:
+    """Valida politica de seguridad de contrasena."""
+    if len(v) < 8:
+        raise ValueError("Minimo 8 caracteres")
+    for patron, mensaje in _PASSWORD_REGLAS:
+        if not re.search(patron, v):
+            raise ValueError(f"Debe contener {mensaje}")
+    return v
 
 
 class UsuarioCreate(BaseModel):
@@ -8,6 +26,11 @@ class UsuarioCreate(BaseModel):
     email: EmailStr
     password: str
     rol: RolUsuario = RolUsuario.visor
+
+    @field_validator('password')
+    @classmethod
+    def validar_password(cls, v: str) -> str:
+        return _validar_complejidad_password(v)
 
 
 class UsuarioUpdate(BaseModel):
@@ -17,14 +40,19 @@ class UsuarioUpdate(BaseModel):
     activo es opcional: permite reactivar (true) o desactivar (false) sin
     pasar por el flujo DELETE con TOTP. Por seguridad, un admin no puede
     desactivarse a si mismo via este endpoint (validacion en el route).
-    La validacion de longitud minima se hace en el route handler para
-    distinguir 'no enviado' de 'enviado vacio'.
     """
     nombre: str
     email: EmailStr
     rol: RolUsuario
     password: Optional[str] = None
     activo: Optional[bool] = None
+
+    @field_validator('password', mode='before')
+    @classmethod
+    def validar_password_opcional(cls, v):
+        if v is None:
+            return v
+        return _validar_complejidad_password(str(v))
 
 
 class AvatarUpdate(BaseModel):
@@ -52,8 +80,11 @@ class UsuarioResponse(BaseModel):
 
 
 class CambiarPassword(BaseModel):
-    """Schema para cambiar la contrasena del usuario autenticado.
-    Pydantic valida min_length=8 antes de que el endpoint se ejecute.
-    """
+    """Schema para cambiar la contrasena del usuario autenticado."""
     password_actual: str
-    password_nueva: str = Field(min_length=8, description="Minimo 8 caracteres")
+    password_nueva: str
+
+    @field_validator('password_nueva')
+    @classmethod
+    def validar_complejidad(cls, v: str) -> str:
+        return _validar_complejidad_password(v)

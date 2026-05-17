@@ -140,7 +140,6 @@ def actualizar_usuario(
     """Actualiza nombre, email, rol, contrasena (opcional) y estado activo.
 
     - Validacion de email: si cambia, verifica que no exista en otro usuario.
-    - Validacion de password: si se envia, debe tener minimo 8 caracteres.
     - Cambio de activo: queda registrado en audit_log como REACTIVAR_USUARIO o
       DESACTIVAR_USUARIO. Un admin no puede desactivarse a si mismo.
     """
@@ -152,12 +151,6 @@ def actualizar_usuario(
         colision = db.query(Usuario).filter(Usuario.email == datos.email).first()
         if colision:
             raise HTTPException(status_code=400, detail="El email ya esta registrado")
-
-    if datos.password is not None and len(datos.password) < 8:
-        raise HTTPException(
-            status_code=400,
-            detail="La contrasena nueva debe tener al menos 8 caracteres",
-        )
 
     cambio_activo: str | None = None
     if datos.activo is not None and datos.activo != encontrado.activo:
