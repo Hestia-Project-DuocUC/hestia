@@ -8,6 +8,22 @@ import type { IncomingMessage } from 'http'
 // pueda alcanzar el contenedor backend por la red interna de Docker.
 const API = process.env.API_URL ?? 'http://localhost:8000'
 
+// Content Security Policy compartida entre el servidor de desarrollo y
+// cualquier proxy de producción. 'unsafe-inline' en script/style es necesario
+// para Vite HMR y Tailwind. Para un build de producción servido con nginx
+// se puede endurecer con nonces y eliminar 'unsafe-inline' de script-src.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self' ws: wss:",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ')
+
 /**
  * Configuracion compartida para cada entrada del proxy.
  *
@@ -41,6 +57,12 @@ export default defineConfig({
   server: {
     port: 3000,
     host: true, // escucha en 0.0.0.0 — necesario para Docker
+    headers: {
+      'Content-Security-Policy': CSP,
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    },
     proxy: {
       '/auth':         apiProxy(API),
       '/insumos':      apiProxy(API),

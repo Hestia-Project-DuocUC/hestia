@@ -243,6 +243,7 @@ def obtener_insumo(
 
 @router.post("/", response_model=InsumoResponse)
 def crear_insumo(
+    request: Request,
     insumo: InsumoCreate,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_operador)
@@ -251,6 +252,11 @@ def crear_insumo(
     db.add(nuevo)
     db.commit()
     db.refresh(nuevo)
+    registrar(
+        db, "CREAR_INSUMO", usuario=usuario,
+        entidad="insumo", entidad_id=nuevo.id,
+        detalle=nuevo.nombre, ip=get_ip(request),
+    )
     return nuevo
 
 
@@ -282,6 +288,11 @@ def actualizar_insumo(
     db.commit()
     db.refresh(insumo)
 
+    registrar(
+        db, "EDITAR_INSUMO", usuario=usuario,
+        entidad="insumo", entidad_id=insumo.id,
+        detalle=insumo.nombre, ip=get_ip(request),
+    )
     if cambio_activo:
         registrar(
             db, cambio_activo, usuario=usuario,

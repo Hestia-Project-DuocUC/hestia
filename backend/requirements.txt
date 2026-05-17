@@ -31,7 +31,7 @@ pyflakes==3.4.0
 pyotp==2.9.0
 python-dotenv==1.2.2
 python-jose==3.5.0
-python-multipart==0.0.26
+python-multipart==0.0.27
 qrcode==7.4.2
 rsa==4.9.1
 six==1.17.0
