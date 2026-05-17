@@ -1,6 +1,7 @@
 import os
 from fastapi import FastAPI, Request, Response
 from fastapi.openapi.utils import get_openapi
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.database import Base, engine, aplicar_migraciones_pendientes
 # Importar todos los modelos para que SQLAlchemy registre sus tablas.
@@ -23,6 +24,10 @@ aplicar_migraciones_pendientes()
 # En produccion debe quedar en false (valor por defecto).
 _docs_habilitados = os.getenv("DOCS_HABILITADOS", "false").lower() == "true"
 
+# Origen del frontend permitido por CORS. En LAN usar la IP del servidor.
+# Ej: CORS_ORIGIN=http://192.168.1.50:3000
+_cors_origin = os.getenv("CORS_ORIGIN", "http://localhost:3000")
+
 app = FastAPI(
     title="Hestia",
     description="Sistema de gestion de insumos - DuocUC",
@@ -35,12 +40,25 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # Security Headers Middleware
 # ---------------------------------------------------------------------------
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self' ws: wss:; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
     "X-XSS-Protection": "1; mode=block",
     "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": _CSP,
 }
 
 
@@ -52,7 +70,16 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+# SecurityHeadersMiddleware es interior; CORSMiddleware es exterior para que
+# responda a preflight OPTIONS antes de que el request llegue a las rutas.
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[_cors_origin],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 app.include_router(salas.router)
 app.include_router(categorias.router)

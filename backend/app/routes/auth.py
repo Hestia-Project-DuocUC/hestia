@@ -16,9 +16,10 @@ from app.models.usuario import Usuario
 from app.utils.security import (
     verificar_password, crear_token, crear_pre_token, verificar_token
 )
-from app.utils.deps import get_usuario_actual
+from app.utils.deps import get_usuario_actual, oauth2_scheme
 from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar, intentos_restantes
 from app.utils.auditoria import registrar, get_ip
+from app.utils.token_blacklist import revocar
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 
@@ -191,6 +192,21 @@ def login(
         usuario=usuario.nombre,
         rol=usuario.rol.value,
     )
+
+
+@router.post("/logout")
+def logout(
+    token: str = Depends(oauth2_scheme),
+    usuario: Usuario = Depends(get_usuario_actual),
+):
+    """Revoca el JWT activo del usuario. Efecto inmediato en todas las requests."""
+    payload = verificar_token(token)
+    if payload:
+        jti = payload.get("jti")
+        exp = payload.get("exp")
+        if jti and exp:
+            revocar(jti, float(exp))
+    return {"mensaje": "Sesion cerrada correctamente"}
 
 
 @router.post("/2fa/completar-login", response_model=LoginResponse)
