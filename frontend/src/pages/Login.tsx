@@ -53,11 +53,11 @@ function ModalAcercaDe({ onClose }: { onClose: () => void }) {
             </p>
             <p>
               <span className="text-slate-300 font-semibold">Tipo de proyecto</span>
-              <br />Proyecto de Título · Ruta IE
+              <br />Proyecto de Título · Desarrollo de Software
             </p>
             <p>
               <span className="text-slate-300 font-semibold">Período</span>
-              <br />2024 – 2025
+              <br />2026 - 1 semestre
             </p>
           </div>
 
