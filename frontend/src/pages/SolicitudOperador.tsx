@@ -65,11 +65,21 @@ export function SolicitudOperador() {
   const [accionando, setAccionando] = useState<number | null>(null)
   const [completandoId, setCompletandoId] = useState<number | null>(null)
   const [notasMap, setNotasMap] = useState<Record<number, string>>({})
-  const [expandido, setExpandido] = useState<number | null>(null)
+  // Set de IDs expandidos — las activas arrancan expandidas al cargar
+  const [expandidos, setExpandidos] = useState<Set<number>>(new Set())
   const [toast, setToast] = useState<string | null>(null)
 
   function showToast(msg: string) {
     setToast(msg); setTimeout(() => setToast(null), 3000)
+  }
+
+  function toggleExpand(id: number) {
+    setExpandidos(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const cargar = useCallback(async () => {
@@ -77,6 +87,10 @@ export function SolicitudOperador() {
     try {
       const { data } = await api.get<SolicitudResponse[]>('/solicitudes/')
       setSolicitudes(data)
+      // Expandir por defecto todas las solicitudes activas (pendiente o en_preparacion)
+      setExpandidos(new Set(
+        data.filter(s => s.estado !== 'completada').map(s => s.id)
+      ))
     } catch {
       showToast('Error al cargar las solicitudes. Verifica la conexión.')
     } finally { setLoading(false) }
@@ -87,6 +101,7 @@ export function SolicitudOperador() {
   const filtradas = solicitudes.filter(s => {
     if (filtro === 'todas') return true
     if (filtro === 'activas') return s.estado === 'pendiente' || s.estado === 'en_preparacion'
+    // 'completada' | 'pendiente' | 'en_preparacion' — match exacto con EstadoSolicitud
     return s.estado === filtro
   })
 
@@ -120,18 +135,19 @@ export function SolicitudOperador() {
   }
 
   const cuentas = {
-    activas: solicitudes.filter(s => s.estado === 'pendiente' || s.estado === 'en_preparacion').length,
-    pendientes: solicitudes.filter(s => s.estado === 'pendiente').length,
-    en_preparacion: solicitudes.filter(s => s.estado === 'en_preparacion').length,
-    completadas: solicitudes.filter(s => s.estado === 'completada').length,
+    activas:       solicitudes.filter(s => s.estado === 'pendiente' || s.estado === 'en_preparacion').length,
+    pendientes:    solicitudes.filter(s => s.estado === 'pendiente').length,
+    en_preparacion:solicitudes.filter(s => s.estado === 'en_preparacion').length,
+    completadas:   solicitudes.filter(s => s.estado === 'completada').length,
   }
 
+  // IMPORTANTE: los keys deben coincidir exactamente con EstadoSolicitud o los alias 'todas'/'activas'
   const FILTROS: { key: FiltroEstado; label: string; count?: number }[] = [
-    { key: 'activas', label: 'Activas', count: cuentas.activas },
-    { key: 'pendientes', label: 'Pendientes', count: cuentas.pendientes },
+    { key: 'activas',        label: 'Activas',        count: cuentas.activas },
+    { key: 'pendiente',      label: 'Pendientes',     count: cuentas.pendientes },
     { key: 'en_preparacion', label: 'En preparación', count: cuentas.en_preparacion },
-    { key: 'completadas', label: 'Completadas', count: cuentas.completadas },
-    { key: 'todas', label: 'Todas' },
+    { key: 'completada',     label: 'Completadas',    count: cuentas.completadas },
+    { key: 'todas',          label: 'Todas' },
   ]
 
   return (
@@ -201,7 +217,7 @@ export function SolicitudOperador() {
           {filtradas.map(sol => {
             const { border, chip } = urgenciaConfig(sol)
             const estaCompletando = completandoId === sol.id
-            const estaExpandido = expandido === sol.id
+            const estaExpandido   = expandidos.has(sol.id)
 
             return (
               <div key={sol.id}
@@ -222,15 +238,17 @@ export function SolicitudOperador() {
                       </p>
                     </div>
                     <button
-                      onClick={() => setExpandido(estaExpandido ? null : sol.id)}
+                      onClick={() => toggleExpand(sol.id)}
                       className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100
-                                 transition-colors flex-shrink-0">
+                                 transition-colors flex-shrink-0"
+                      aria-label={estaExpandido ? 'Colapsar' : 'Expandir'}
+                    >
                       {estaExpandido ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                   </div>
                 </div>
 
-                {(estaExpandido || sol.estado !== 'completada') && (
+                {estaExpandido && (
                   <div className="px-5 pb-1 border-t border-slate-100">
                     <ul className="mt-3 space-y-1.5 mb-3">
                       {sol.items.map(item => (

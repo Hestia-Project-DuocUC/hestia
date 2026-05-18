@@ -1,8 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Package, ChevronLeft, ChevronRight,
   Plus, Pencil, Archive, ArchiveRestore, CheckCircle, ShieldAlert,
-  Download, X, SlidersHorizontal
+  Download, FileText, X, SlidersHorizontal
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
@@ -68,10 +68,23 @@ export function Insumos() {
   const [deleting, setDeleting]         = useState(false)
   const [toast, setToast]               = useState<string | null>(null)
   const [exporting, setExporting]       = useState(false)
+  const [showExportMenu, setShowExportMenu] = useState(false)
+  const exportRef = useRef<HTMLDivElement>(null)
 
   function showToast(msg: string) {
     setToast(msg); setTimeout(() => setToast(null), 3000)
   }
+
+  // Cierra el dropdown de exportar al hacer click fuera
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setShowExportMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   useEffect(() => {
     Promise.all([
@@ -114,21 +127,25 @@ export function Insumos() {
     setBajoStock(false); setMostrar(false); setPage(0)
   }
 
-  async function handleExportar() {
-    setExporting(true)
+  async function handleExportar(formato: 'csv' | 'xlsx') {
+    setExporting(true); setShowExportMenu(false)
     try {
-      const params: Record<string, string | number | boolean> = {}
+      const params: Record<string, string | number | boolean> = { formato }
       if (nombreFiltro) params.nombre = nombreFiltro
-      if (salaFiltro) params.sala_id = parseInt(salaFiltro)
-      if (catFiltro) params.categoria_id = parseInt(catFiltro)
-      if (bajoStock) params.bajo_stock = true
+      if (salaFiltro)   params.sala_id = parseInt(salaFiltro)
+      if (catFiltro)    params.categoria_id = parseInt(catFiltro)
+      if (bajoStock)    params.bajo_stock = true
       if (mostrarInactivos) params.incluir_inactivos = true
       const res = await api.get('/insumos/exportar', { params, responseType: 'blob' })
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url; a.download = 'inventario_hestia.csv'; a.click()
+      const ext  = formato === 'xlsx' ? 'xlsx' : 'csv'
+      const mime = formato === 'xlsx'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'text/csv'
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }))
+      const a   = document.createElement('a')
+      a.href = url; a.download = `inventario_hestia.${ext}`; a.click()
       URL.revokeObjectURL(url)
-      showToast('Exportacion descargada')
+      showToast(`Exportado como ${ext.toUpperCase()}`)
     } finally { setExporting(false) }
   }
 
@@ -225,12 +242,36 @@ export function Insumos() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleExportar} disabled={exporting}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
-                       text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-colors
-                       disabled:opacity-50">
-            <Download size={14} />{exporting ? 'Exportando...' : 'Exportar CSV'}
-          </button>
+
+          {/* Exportar — solo visible para admin y operador */}
+          {puedeEscribir && (
+            <div className="relative" ref={exportRef}>
+              <button
+                onClick={() => setShowExportMenu(v => !v)}
+                disabled={exporting}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200
+                           text-slate-600 hover:bg-slate-50 text-sm font-semibold
+                           transition-colors disabled:opacity-50">
+                <Download size={14} />{exporting ? 'Exportando...' : 'Exportar'}
+              </button>
+              {showExportMenu && (
+                <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200
+                                rounded-xl shadow-lg z-20 overflow-hidden min-w-36">
+                  <button onClick={() => handleExportar('csv')}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm
+                               text-slate-700 hover:bg-slate-50 font-semibold">
+                    <FileText size={14} className="text-slate-400" /> CSV
+                  </button>
+                  <button onClick={() => handleExportar('xlsx')}
+                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm
+                               text-slate-700 hover:bg-slate-50 font-semibold">
+                    <FileText size={14} className="text-teal-500" /> Excel (.xlsx)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {puedeEscribir && (
             <button onClick={abrirCrear}
               className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 text-white
