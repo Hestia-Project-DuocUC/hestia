@@ -7,11 +7,93 @@ import type { LoginResponse } from '../types/api'
 
 type Modo2FA = 'totp' | 'recovery'
 
+// ── Modal: Acerca de ──
+function ModalAcercaDe({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4
+                 bg-black/70 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl
+                   max-w-sm w-full p-7 relative"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-slate-500 hover:text-slate-300
+                     text-xl leading-none transition-colors"
+          aria-label="Cerrar"
+        >
+          ×
+        </button>
+
+        <div className="flex flex-col items-center mb-6">
+          <Logo className="w-16 h-16 mb-3" />
+          <h2 className="text-xl font-black text-white tracking-tight">Hestia</h2>
+          <p className="text-teal-400 text-xs font-semibold mt-1">
+            Sistema de gestión de insumos médicos
+          </p>
+        </div>
+
+        <div className="space-y-3 text-xs text-slate-400">
+          <div className="bg-slate-900/60 rounded-xl border border-slate-700 px-4 py-3 space-y-2">
+            <p>
+              <span className="text-slate-300 font-semibold">Institución</span>
+              <br />DuocUC — Sede San Bernardo
+            </p>
+            <p>
+              <span className="text-slate-300 font-semibold">Escuela</span>
+              <br />Escuela de Salud
+            </p>
+            <p>
+              <span className="text-slate-300 font-semibold">Carrera</span>
+              <br />Informática Biomédica
+            </p>
+            <p>
+              <span className="text-slate-300 font-semibold">Tipo de proyecto</span>
+              <br />Proyecto de Título · Ruta IE
+            </p>
+            <p>
+              <span className="text-slate-300 font-semibold">Período</span>
+              <br />2024 – 2025
+            </p>
+          </div>
+
+          <div className="bg-slate-900/60 rounded-xl border border-slate-700 px-4 py-3">
+            <p className="text-slate-300 font-semibold mb-2">Stack tecnológico</p>
+            <div className="flex flex-wrap gap-1.5">
+              {['FastAPI', 'PostgreSQL', 'React 19', 'TypeScript',
+                'Tailwind CSS', 'Docker'].map(t => (
+                <span key={t}
+                  className="bg-slate-700 text-slate-300 px-2 py-0.5 rounded-md
+                             font-mono text-[10px]">
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <p className="text-center text-slate-600 text-[10px] mt-5">
+          <strong className="text-slate-500">H</strong>ospitalidad·
+          <strong className="text-slate-500">E</strong>ficacia·
+          <strong className="text-slate-500">S</strong>ervicio·
+          <strong className="text-slate-500">T</strong>ransparencia·
+          <strong className="text-slate-500">I</strong>nsumos·
+          <strong className="text-slate-500">A</strong>postolado
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Componente principal ──
 export function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  // --- Estado login ---
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [totp, setTotp] = useState('')
@@ -21,12 +103,13 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // --- Estado recuperación de contraseña ---
   const [isForgot, setIsForgot] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
   const [forgotError, setForgotError] = useState<string | null>(null)
   const [forgotOk, setForgotOk] = useState(false)
+
+  const [showAbout, setShowAbout] = useState(false)
 
   const is2FA = preToken !== null
 
@@ -130,10 +213,19 @@ export function Login() {
     transition-colors disabled:opacity-50 disabled:cursor-not-allowed
   `
   const labelCls = "block text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wide"
+  const footerBtnCls = `
+    text-xs font-semibold text-slate-600 hover:text-slate-300
+    transition-colors duration-150 px-1 py-0.5 rounded
+    hover:bg-slate-800/60 focus:outline-none focus-visible:ring-2
+    focus-visible:ring-teal-500
+  `
 
   return (
     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_#134e4a22_0%,_transparent_60%)]" />
+
+      {showAbout && <ModalAcercaDe onClose={() => setShowAbout(false)} />}
+
       <div className="relative w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-32 h-32 mb-4">
@@ -323,9 +415,26 @@ export function Login() {
             </>
           )}
         </div>
-        <p className="text-center text-slate-600 text-xs mt-6">
-          Escuela de Salud — DuocUC
-        </p>
+
+        {/* ── Pie de página con botones Acerca de / Soporte ── */}
+        <div className="flex items-center justify-between mt-5 px-1">
+          <button
+            type="button"
+            onClick={() => setShowAbout(true)}
+            className={footerBtnCls}
+          >
+            Acerca de
+          </button>
+          <span className="text-slate-700 text-xs select-none">
+            Escuela de Salud — DuocUC
+          </span>
+          <a
+            href="mailto:hestia.soporte.cc@gmail.com"
+            className={footerBtnCls}
+          >
+            Soporte
+          </a>
+        </div>
       </div>
     </div>
   )
