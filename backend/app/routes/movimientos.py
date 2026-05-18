@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
@@ -19,6 +19,7 @@ from app.models.sala import Sala
 from app.schemas.movimiento import MovimientoCreate, MovimientoResponse, MovimientoEnriquecido
 from app.schemas.comun import PaginatedResponse
 from app.utils.deps import get_usuario_actual, require_operador
+from app.utils.auditoria import registrar, get_ip
 
 router = APIRouter(prefix="/movimientos", tags=["Movimientos"])
 
@@ -188,6 +189,7 @@ def listar_movimientos(
 
 @router.post("/", response_model=MovimientoResponse)
 def registrar_movimiento(
+    request: Request,
     mov: MovimientoCreate,
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_operador),
@@ -219,6 +221,15 @@ def registrar_movimiento(
     db.add(nuevo_mov)
     db.commit()
     db.refresh(nuevo_mov)
+    registrar(
+        db,
+        "REGISTRAR_MOVIMIENTO",
+        usuario=usuario,
+        entidad="movimiento",
+        entidad_id=nuevo_mov.id,
+        detalle=f"{mov.tipo.value} {mov.cantidad}x {insumo.nombre}",
+        ip=get_ip(request),
+    )
     return nuevo_mov
 
 

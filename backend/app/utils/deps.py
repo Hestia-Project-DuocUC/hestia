@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.usuario import Usuario, RolUsuario
 from app.utils.security import verificar_token
+from app.utils.token_blacklist import esta_revocado
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
@@ -14,9 +15,9 @@ def get_usuario_actual(
 ) -> Usuario:
     """Cualquier usuario autenticado con token de acceso completo.
     Rechaza pre_tokens del flujo 2FA para evitar acceso parcial.
-    Rechaza usuarios desactivados (soft-delete): si un admin desactiva la
-    cuenta mientras hay un JWT en uso, la sesion deja de ser valida en la
-    siguiente request en lugar de esperar la expiracion del token."""
+    Rechaza usuarios desactivados (soft-delete).
+    Rechaza tokens revocados via logout (blacklist en memoria).
+    """
     excepcion = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Token invalido o expirado",
@@ -27,8 +28,12 @@ def get_usuario_actual(
         raise excepcion
 
     # Los pre_tokens solo sirven para /auth/2fa/completar-login.
-    # Si alguien intenta usarlos para acceder a endpoints protegidos, se rechaza.
     if payload.get("tipo") == "pre_auth":
+        raise excepcion
+
+    # Verificar que el token no fue revocado via logout.
+    jti = payload.get("jti")
+    if jti and esta_revocado(jti):
         raise excepcion
 
     usuario_id = payload.get("sub")
