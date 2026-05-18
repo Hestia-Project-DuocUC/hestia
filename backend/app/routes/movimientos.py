@@ -194,7 +194,7 @@ def registrar_movimiento(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(require_operador),
 ):
-    insumo = db.query(Insumo).filter(Insumo.id == mov.insumo_id).first()
+    insumo = db.query(Insumo).filter(Insumo.id == mov.insumo_id).with_for_update().first()
     if not insumo:
         raise HTTPException(status_code=404, detail="Insumo no encontrado")
 

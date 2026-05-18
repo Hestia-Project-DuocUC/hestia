@@ -220,9 +220,14 @@ def completar_login_2fa(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="pre_token invalido o expirado",
         )
-    usuario = db.query(Usuario).filter(
-        Usuario.id == int(payload["sub"])
-    ).first()
+    try:
+        uid = int(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="pre_token invalido o expirado",
+        )
+    usuario = db.query(Usuario).filter(Usuario.id == uid).first()
     if not usuario or not usuario.totp_habilitado or not usuario.totp_secret:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -262,9 +267,14 @@ def recuperar_acceso_2fa(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="pre_token invalido o expirado",
         )
-    usuario = db.query(Usuario).filter(
-        Usuario.id == int(payload["sub"])
-    ).first()
+    try:
+        uid = int(payload["sub"])
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="pre_token invalido o expirado",
+        )
+    usuario = db.query(Usuario).filter(Usuario.id == uid).first()
     if not usuario or not usuario.totp_habilitado:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

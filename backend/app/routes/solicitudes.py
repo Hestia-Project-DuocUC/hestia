@@ -304,9 +304,16 @@ def completar_solicitud(
             detail="Solo se pueden completar solicitudes pendientes o en preparacion.",
         )
 
-    # Re-verificar stock actualizado antes de descontar
+    # Re-verificar stock con bloqueo pesimista para evitar race conditions.
+    # Con FOR UPDATE, dos completar_solicitud concurrentes se serializan.
+    insumos_bloqueados: dict[int, Insumo] = {}
     for item in s.items:
-        insumo = item.insumo
+        insumo = (
+            db.query(Insumo)
+            .filter(Insumo.id == item.insumo_id)
+            .with_for_update()
+            .first()
+        )
         nombre = insumo.nombre if insumo else str(item.insumo_id)
         if not insumo or not insumo.activo:
             raise HTTPException(
@@ -322,6 +329,7 @@ def completar_solicitud(
                     f"requerido: {item.cantidad_solicitada}."
                 ),
             )
+        insumos_bloqueados[item.insumo_id] = insumo
 
     # Descontar stock y registrar movimientos de salida
     docente_nombre = s.docente.nombre if s.docente else "Docente"
@@ -329,7 +337,7 @@ def completar_solicitud(
     motivo = f"Solicitud #{s.id} \u2014 {docente_nombre} \u2014 {sala_nombre}"
 
     for item in s.items:
-        item.insumo.stock_actual -= item.cantidad_solicitada
+        insumos_bloqueados[item.insumo_id].stock_actual -= item.cantidad_solicitada
         db.add(Movimiento(
             tipo=TipoMovimiento.salida,
             cantidad=item.cantidad_solicitada,

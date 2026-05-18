@@ -1,5 +1,5 @@
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import hashlib
 import bcrypt
@@ -11,6 +11,12 @@ load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 480))
+
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY no esta configurada. "
+        "Crea backend/.env con SECRET_KEY=<clave-segura>."
+    )
 
 
 def _prehash(password: str) -> bytes:
@@ -29,6 +35,8 @@ def crear_token(data: dict) -> str:
     """JWT de acceso completo con expiracion configurada en el .env.
     Incluye jti (JWT ID) para permitir revocacion individual via logout."""
     payload = data.copy()
+    exp = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload.update({"exp": exp})
     payload.update({
         "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "jti": str(uuid.uuid4()),
@@ -42,7 +50,7 @@ def crear_pre_token(data: dict) -> str:
     Los endpoints protegidos rechazan este tipo de token."""
     payload = data.copy()
     payload.update({
-        "exp": datetime.utcnow() + timedelta(minutes=5),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
         "tipo": "pre_auth"
     })
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
