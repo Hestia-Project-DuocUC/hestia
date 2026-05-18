@@ -9,12 +9,12 @@ from app.database import get_db
 from app.models.solicitud import SolicitudRetiro, SolicitudItem, EstadoSolicitud
 from app.models.insumo import Insumo
 from app.models.movimiento import Movimiento, TipoMovimiento
-from app.models.usuario import Usuario, RolUsuario
+from app.models.usuario import Usuario
 from app.schemas.solicitud import (
     SolicitudCreate, SolicitudResponse,
     SolicitudItemResponse, SolicitudUpdateEstado,
 )
-from app.utils.deps import get_usuario_actual, require_operador
+from app.utils.deps import require_docente, require_operador
 
 router = APIRouter(prefix="/solicitudes", tags=["Solicitudes"])
 
@@ -117,17 +117,9 @@ def resumen_solicitudes_recientes(
 @router.get("/mis-solicitudes", response_model=list[SolicitudResponse])
 def mis_solicitudes(
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual),
+    usuario: Usuario = Depends(require_docente),
 ):
-    """Docente consulta sus propias solicitudes, de mas reciente a mas antigua.
-
-    Solo accesible para usuarios con rol 'docente'.
-    """
-    if usuario.rol != RolUsuario.docente:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los docentes pueden consultar sus solicitudes.",
-        )
+    """Docente consulta sus propias solicitudes, de mas reciente a mas antigua."""
     solicitudes = (
         db.query(SolicitudRetiro)
         .options(
@@ -171,22 +163,15 @@ def listar_solicitudes(
 def crear_solicitud(
     datos: SolicitudCreate,
     db: Session = Depends(get_db),
-    usuario: Usuario = Depends(get_usuario_actual),
+    usuario: Usuario = Depends(require_docente),
 ):
     """Docente crea una solicitud de retiro de insumos para su clase.
 
     Validaciones:
-    - Solo rol 'docente' puede crear solicitudes.
     - fecha_clase no puede ser mas de 5 minutos en el pasado.
     - Cada insumo debe existir, estar activo y tener stock suficiente.
       Si se repite un insumo en los items, se suman las cantidades.
     """
-    if usuario.rol != RolUsuario.docente:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo los docentes pueden crear solicitudes de retiro.",
-        )
-
     # Validar fecha_clase (tolerancia de 5 minutos para desfases de reloj)
     ahora = datetime.now(timezone.utc)
     segundos_en_pasado = (ahora - datos.fecha_clase).total_seconds()

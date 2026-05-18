@@ -1,12 +1,20 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Hestia — Docker Compose
-# Levanta tres servicios: PostgreSQL, FastAPI y el frontend Vite (React).
+# Levanta cuatro servicios: PostgreSQL, FastAPI, el frontend Vite (React) y nginx.
 #
 # Uso:
-#   docker compose up          → levanta todo
-#   docker compose up --build  → reconstruye imagenes y levanta
+#   ./generate-cert.sh         → genera certificado SSL (primera vez)
+#   docker compose up --build  → construye imagenes y levanta todo
+#   docker compose up          → levanta sin reconstruir
 #   docker compose down        → apaga los contenedores
 #   docker compose down -v     → apaga Y borra la base de datos (cuidado)
+#
+# Acceso:
+#   https://<IP-LAN>   → nginx (HTTPS, recomendado)
+#   http://<IP-LAN>    → redirige a HTTPS automaticamente
+#
+# En produccion se pueden comentar los puertos 8000 y 3000 del api y frontend
+# para que solo nginx sea accesible desde la LAN.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -64,6 +72,21 @@ services:
       # Volumen anonimo para node_modules: evita que la carpeta local
       # (compilada para el OS del host) sobreescriba los binarios del contenedor.
       - /app/node_modules
+
+  # ── Nginx Reverse Proxy (HTTPS/TLS) ────────────────────────────────────
+  # Requiere certificados en docker/nginx/certs/ (generar con ./generate-cert.sh)
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
 
 # ── Volumes persistentes ───────────────────────────────────────────────
 volumes:
