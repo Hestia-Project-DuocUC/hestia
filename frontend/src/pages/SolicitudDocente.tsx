@@ -56,6 +56,7 @@ export function SolicitudDocente() {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [showWarning, setShowWarning] = useState(false)
 
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<InsumoResponse[]>([])
@@ -152,12 +153,19 @@ export function SolicitudDocente() {
     setCartItems(prev => prev.filter(i => i.insumo.id !== insumoId))
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Valida el formulario y muestra el aviso antes de enviar
+  function handlePreSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSubmitError(null)
     if (!salaId) { setSubmitError('Selecciona una sala.'); return }
     if (!fechaClase) { setSubmitError('Indica la fecha y hora de tu clase.'); return }
     if (cartItems.length === 0) { setSubmitError('Agrega al menos un insumo al carrito.'); return }
+    setShowWarning(true)
+  }
+
+  // Envío real tras confirmar el aviso
+  async function handleConfirmSubmit() {
+    setShowWarning(false)
     setSubmitting(true)
     try {
       await api.post('/solicitudes/', {
@@ -193,6 +201,77 @@ export function SolicitudDocente() {
         </div>
       )}
 
+      {/* ── Modal de advertencia de mermas ── */}
+      {showWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4
+                        bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6
+                          border border-amber-200">
+            <div className="flex items-start gap-3 mb-5">
+              <div className="w-10 h-10 rounded-full bg-amber-100 border border-amber-200
+                              flex items-center justify-center flex-shrink-0 mt-0.5">
+                <AlertTriangle size={20} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 mb-1.5">
+                  Compromiso de uso de insumos
+                </h3>
+                <p className="text-sm text-slate-600 leading-relaxed">
+                  Al enviar esta solicitud confirmas que utilizarás{' '}
+                  <strong className="text-slate-900">la totalidad</strong>{' '}
+                  de los insumos pedidos durante tu clase. El no uso de
+                  insumos retirados genera{' '}
+                  <strong className="text-amber-700">mermas</strong>{' '}
+                  y puede derivar en{' '}
+                  <strong className="text-slate-900">llamados de atención formal</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl border border-slate-200 px-4 py-3 mb-5">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-2">
+                Insumos a retirar
+              </p>
+              <ul className="space-y-1.5">
+                {cartItems.map(({ insumo, cantidad }) => (
+                  <li key={insumo.id}
+                    className="flex items-center justify-between text-sm">
+                    <span className="text-slate-700 truncate mr-4">{insumo.nombre}</span>
+                    <span className="font-bold text-slate-900 flex-shrink-0">
+                      x{cantidad}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-400 mt-2 pt-2 border-t border-slate-200">
+                Total: <strong className="text-slate-600">{totalItems} unidades</strong>
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowWarning(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600
+                           font-semibold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSubmit}
+                disabled={submitting}
+                className="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700
+                           text-white font-bold text-sm transition-colors
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? 'Enviando...' : 'Confirmar y enviar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6">
         <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
           <ClipboardList size={24} className="text-teal-600" />
@@ -203,7 +282,7 @@ export function SolicitudDocente() {
         </p>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handlePreSubmit}>
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 mb-6">
           <h2 className="text-sm font-bold text-slate-700 mb-4">Nueva solicitud</h2>
 

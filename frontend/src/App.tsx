@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Login }            from './pages/Login'
+import { ResetPassword }    from './pages/ResetPassword'
 import { Dashboard }        from './pages/Dashboard'
 import { Alertas }          from './pages/Alertas'
 import { Insumos }          from './pages/Insumos'
@@ -33,7 +34,11 @@ export function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={<Login />} />
+        {/* Rutas públicas — sin autenticación */}
+        <Route path="/login"          element={<Login />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+
+        {/* Rutas protegidas — requieren JWT válido (guard en Layout) */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard"   element={<Dashboard />} />

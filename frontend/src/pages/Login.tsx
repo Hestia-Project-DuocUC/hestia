@@ -11,6 +11,7 @@ export function Login() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
 
+  // --- Estado login ---
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [totp, setTotp] = useState('')
@@ -19,6 +20,13 @@ export function Login() {
   const [modo2FA, setModo2FA] = useState<Modo2FA>('totp')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // --- Estado recuperación de contraseña ---
+  const [isForgot, setIsForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotError, setForgotError] = useState<string | null>(null)
+  const [forgotOk, setForgotOk] = useState(false)
 
   const is2FA = preToken !== null
 
@@ -88,8 +96,28 @@ export function Login() {
     } finally { setLoading(false) }
   }
 
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault()
+    setForgotLoading(true)
+    setForgotError(null)
+    try {
+      await api.post('/auth/recuperar-password', { email: forgotEmail })
+      setForgotOk(true)
+    } catch {
+      setForgotError('No fue posible procesar la solicitud. Intenta de nuevo.')
+    } finally { setForgotLoading(false) }
+  }
+
   function volverAlLogin() {
     setPreToken(null); setError(null); setTotp(''); setRecovery('')
+  }
+
+  function abrirForgot() {
+    setIsForgot(true); setForgotEmail(email); setForgotError(null); setForgotOk(false)
+  }
+
+  function cerrarForgot() {
+    setIsForgot(false); setForgotEmail(''); setForgotError(null); setForgotOk(false)
   }
 
   const inputCls = `
@@ -115,7 +143,9 @@ export function Login() {
         </div>
 
         <div className="bg-slate-800 rounded-2xl border border-slate-700 shadow-2xl p-7">
-          {!is2FA ? (
+
+          {/* ── Vista: Login ── */}
+          {!is2FA && !isForgot ? (
             <>
               <h2 className="text-base font-bold text-white mb-5">Iniciar sesión</h2>
               <form onSubmit={handleLogin} className="space-y-4">
@@ -145,8 +175,75 @@ export function Login() {
                   {loading ? 'Verificando...' : 'Ingresar'}
                 </button>
               </form>
+              <button
+                type="button"
+                onClick={abrirForgot}
+                className="w-full mt-4 text-xs text-slate-500 hover:text-slate-300
+                           font-semibold transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
             </>
+
+          ) : !is2FA && isForgot ? (
+            /* ── Vista: Recuperar contraseña ── */
+            <>
+              <button onClick={cerrarForgot}
+                className="text-slate-400 hover:text-slate-200 text-sm font-semibold
+                           mb-4 flex items-center gap-1">
+                ← Volver
+              </button>
+              {forgotOk ? (
+                <div className="text-center py-2">
+                  <div className="w-12 h-12 rounded-full bg-teal-900 border border-teal-700
+                                  flex items-center justify-center mx-auto mb-4 text-2xl">
+                    ✉️
+                  </div>
+                  <h2 className="text-base font-bold text-white mb-2">Revisa tu correo</h2>
+                  <p className="text-slate-400 text-xs mb-5">
+                    Si el email{' '}
+                    <span className="text-teal-400 font-semibold">{forgotEmail}</span>{' '}
+                    está registrado, recibirás un enlace para restablecer tu contraseña.
+                    El enlace es válido por 1 hora.
+                  </p>
+                  <button onClick={cerrarForgot} className={btnCls}>
+                    Volver al inicio de sesión
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <h2 className="text-base font-bold text-white mb-1">Recuperar contraseña</h2>
+                  <p className="text-slate-400 text-xs mb-5">
+                    Ingresa tu correo y te enviaremos un enlace para crear una nueva contraseña.
+                  </p>
+                  <form onSubmit={handleForgot} className="space-y-4">
+                    <div>
+                      <label className={labelCls}>Correo electrónico</label>
+                      <input
+                        type="email" value={forgotEmail}
+                        onChange={e => { setForgotEmail(e.target.value); setForgotError(null) }}
+                        className={inputCls} placeholder="usuario@hestia.duoc.cl"
+                        required autoFocus
+                      />
+                    </div>
+                    {forgotError && (
+                      <p className="text-rose-400 text-xs bg-rose-950 border border-rose-800
+                                    px-3 py-2 rounded-lg font-semibold">{forgotError}</p>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={forgotLoading || !forgotEmail}
+                      className={btnCls}
+                    >
+                      {forgotLoading ? 'Enviando...' : 'Enviar enlace de recuperación'}
+                    </button>
+                  </form>
+                </>
+              )}
+            </>
+
           ) : modo2FA === 'totp' ? (
+            /* ── Vista: 2FA TOTP ── */
             <>
               <button onClick={volverAlLogin}
                 className="text-slate-400 hover:text-slate-200 text-sm font-semibold
@@ -184,7 +281,9 @@ export function Login() {
                 Perdí acceso a mi app — usar código de recuperación
               </button>
             </>
+
           ) : (
+            /* ── Vista: 2FA Recovery Code ── */
             <>
               <button
                 onClick={() => { setModo2FA('totp'); setError(null) }}
