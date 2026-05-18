@@ -9,6 +9,7 @@ from app.database import Base, engine, aplicar_migraciones_pendientes
 from app.models import sala, categoria, usuario, movimiento, insumo  # noqa
 from app.models import audit_log  # noqa
 from app.models import solicitud  # noqa  <- SolicitudRetiro y SolicitudItem
+from app.models import token_recuperacion  # noqa  <- TokenRecuperacion
 from app.routes import (
     salas, categorias, usuarios, movimientos, insumos, auth, resumen, importar
 )

@@ -35,10 +35,8 @@ def crear_token(data: dict) -> str:
     """JWT de acceso completo con expiracion configurada en el .env.
     Incluye jti (JWT ID) para permitir revocacion individual via logout."""
     payload = data.copy()
-    exp = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload.update({"exp": exp})
     payload.update({
-        "exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
         "jti": str(uuid.uuid4()),
     })
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

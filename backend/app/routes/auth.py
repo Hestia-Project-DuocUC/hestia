@@ -1,36 +1,53 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from typing import Optional
-from pydantic import BaseModel
-import pyotp
-import qrcode
-import io
-import base64
-import secrets
+import os
+import re
+import logging
 import hashlib
 import json
+import secrets
+import io
+import base64
+import pyotp
+import qrcode
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
+from pydantic import BaseModel, field_validator
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.usuario import Usuario
+from app.models.token_recuperacion import TokenRecuperacion
 from app.utils.security import (
-    verificar_password, crear_token, crear_pre_token, verificar_token
+    verificar_password, crear_token, crear_pre_token, verificar_token, hashear_password,
 )
 from app.utils.deps import get_usuario_actual, oauth2_scheme
 from app.utils.rate_limit import verificar_limite, registrar_fallo, limpiar, intentos_restantes
 from app.utils.auditoria import registrar, get_ip
 from app.utils.token_blacklist import revocar
+from app.utils.email import enviar_email
 
 router = APIRouter(prefix="/auth", tags=["Autenticacion"])
 
+_log = logging.getLogger("hestia.auth")
+
 TOTP_VALID_WINDOW = 1
 NUM_RECOVERY_CODES = 10
-
 CUENTA_INACTIVA_DETALLE = "Cuenta inactiva. Contacta al administrador."
+HORARIO_INICIO_H = int(os.getenv("HORARIO_INICIO_H", "8"))
+HORARIO_FIN_H = int(os.getenv("HORARIO_FIN_H", "20"))
+
+_PASSWORD_REGLAS = [
+    (r'[A-Z]', "al menos una letra mayuscula"),
+    (r'[a-z]', "al menos una letra minuscula"),
+    (r'\d', "al menos un numero"),
+    (r'[^a-zA-Z0-9]', "al menos un caracter especial"),
+]
 
 
 # ---------------------------------------------------------------------------
-# Modelos
+# Schemas de request/response
 # ---------------------------------------------------------------------------
 
 class LoginResponse(BaseModel):
@@ -66,8 +83,27 @@ class CodigoTOTPRequest(BaseModel):
     codigo: str
 
 
+class SolicitarRecoveryRequest(BaseModel):
+    email: str
+
+
+class ConfirmarResetRequest(BaseModel):
+    token: str
+    nueva_password: str
+
+    @field_validator("nueva_password")
+    @classmethod
+    def _check_complexity(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Minimo 8 caracteres")
+        for patron, msg in _PASSWORD_REGLAS:
+            if not re.search(patron, v):
+                raise ValueError(f"Debe contener {msg}")
+        return v
+
+
 # ---------------------------------------------------------------------------
-# Helpers
+# Helpers internos
 # ---------------------------------------------------------------------------
 
 def _generar_qr_base64(uri: str) -> str:
@@ -114,7 +150,7 @@ def _verificar_y_consumir_recovery_code(
 
 
 # ---------------------------------------------------------------------------
-# Login
+# Login / Logout
 # ---------------------------------------------------------------------------
 
 @router.post("/login", response_model=LoginResponse)
@@ -123,17 +159,27 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """Paso 1 del login con rate limiting y audit log.
+    """Login con rate limiting, audit log y alertas de comportamiento sospechoso.
 
     Flujo:
-    1. verificar_limite() antes de tocar la BD (no revela si el email existe).
-    2. Credenciales incorrectas -> registrar_fallo() + audit LOGIN_FALLIDO.
-    3. Cuenta inactiva (soft-deleted) -> 403 + audit LOGIN_BLOQUEADO_INACTIVO.
-    4. Exito -> limpiar() + audit LOGIN_EXITOSO.
-    Sin 2FA: devuelve JWT completo.
-    Con 2FA: devuelve pre_token de vida corta.
+    1. verificar_limite() — bloquea antes de tocar la BD si la cuenta esta bloqueada.
+       Si el limite se supera, registra ALERTA_CUENTA_BLOQUEADA en el audit log.
+    2. Credenciales incorrectas -> LOGIN_FALLIDO.
+       Si quedan <= 2 intentos, registra ALERTA_INTENTOS_FALLIDOS.
+    3. Cuenta inactiva -> LOGIN_BLOQUEADO_INACTIVO.
+    4. Login exitoso fuera del horario configurado -> ALERTA_ACCESO_FUERA_HORARIO.
+    Sin 2FA: devuelve JWT completo. Con 2FA: devuelve pre_token de 5 min.
     """
-    verificar_limite(form_data.username)
+    try:
+        verificar_limite(form_data.username)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+            registrar(
+                db, "ALERTA_CUENTA_BLOQUEADA",
+                detalle=form_data.username,
+                ip=get_ip(request),
+            )
+        raise
 
     usuario = db.query(Usuario).filter(
         Usuario.email == form_data.username
@@ -150,6 +196,13 @@ def login(
             detalle=form_data.username,
             ip=get_ip(request),
         )
+        if 0 < restantes <= 2:
+            registrar(
+                db, "ALERTA_INTENTOS_FALLIDOS",
+                usuario=usuario,
+                detalle=f"{restantes} intento(s) restante(s) — {form_data.username}",
+                ip=get_ip(request),
+            )
         if restantes > 0:
             s = 's' if restantes != 1 else ''
             n = 'n' if restantes != 1 else ''
@@ -181,6 +234,18 @@ def login(
     limpiar(form_data.username)
     registrar(db, "LOGIN_EXITOSO", usuario=usuario, ip=get_ip(request))
 
+    hora = datetime.now(timezone.utc).hour
+    if hora < HORARIO_INICIO_H or hora >= HORARIO_FIN_H:
+        registrar(
+            db, "ALERTA_ACCESO_FUERA_HORARIO",
+            usuario=usuario,
+            detalle=(
+                f"Login a las {hora:02d}h UTC "
+                f"(horario configurado: {HORARIO_INICIO_H}-{HORARIO_FIN_H}h)"
+            ),
+            ip=get_ip(request),
+        )
+
     if usuario.totp_habilitado:
         pre_token = crear_pre_token({"sub": str(usuario.id)})
         return LoginResponse(requires_2fa=True, pre_token=pre_token)
@@ -208,6 +273,10 @@ def logout(
             revocar(jti, float(exp))
     return {"mensaje": "Sesion cerrada correctamente"}
 
+
+# ---------------------------------------------------------------------------
+# 2FA — flujo de verificacion post-login
+# ---------------------------------------------------------------------------
 
 @router.post("/2fa/completar-login", response_model=LoginResponse)
 def completar_login_2fa(
@@ -304,7 +373,7 @@ def recuperar_acceso_2fa(
 
 
 # ---------------------------------------------------------------------------
-# Gestion 2FA
+# 2FA — gestion de configuracion
 # ---------------------------------------------------------------------------
 
 @router.post("/2fa/setup", response_model=Setup2FAResponse)
@@ -369,3 +438,85 @@ def desactivar_2fa(
     usuario.totp_recovery_codes = None
     db.commit()
     return {"mensaje": "2FA desactivado correctamente"}
+
+
+# ---------------------------------------------------------------------------
+# Recuperacion de contrasena sin dependencia del admin
+# ---------------------------------------------------------------------------
+
+@router.post("/recuperar-password")
+def solicitar_recuperacion(
+    datos: SolicitarRecoveryRequest,
+    db: Session = Depends(get_db),
+):
+    """Genera un token de recuperacion y lo envia por email (o loguea si no hay SMTP).
+
+    Siempre responde con el mismo mensaje para no revelar si el email existe.
+    Token valido por 1 hora, de un solo uso.
+    """
+    usuario = db.query(Usuario).filter(
+        Usuario.email == datos.email,
+        Usuario.activo.is_(True),
+    ).first()
+    if usuario:
+        token = secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(token.encode()).hexdigest()
+        expira = datetime.now(timezone.utc) + timedelta(hours=1)
+        db.add(TokenRecuperacion(
+            email=datos.email,
+            token_hash=token_hash,
+            expira_en=expira,
+        ))
+        db.commit()
+        base_url = os.getenv("BASE_URL", "http://localhost:3000")
+        link = f"{base_url}/reset-password?token={token}"
+        try:
+            enviar_email(
+                datos.email,
+                "Recuperar contrasena — Hestia",
+                f"<p>Hola {usuario.nombre},</p>"
+                f"<p>Usa este enlace para restablecer tu contrasena "
+                f"(valido por 1 hora):</p>"
+                f"<p><a href='{link}'>{link}</a></p>"
+                f"<p>Si no solicitaste este cambio, ignora este mensaje.</p>",
+            )
+        except Exception:
+            _log.info("Recovery link (sin SMTP): %s -> %s", datos.email, link)
+    return {"mensaje": "Si el email existe en el sistema, recibiras instrucciones."}
+
+
+@router.post("/confirmar-reset")
+def confirmar_reset(
+    datos: ConfirmarResetRequest,
+    db: Session = Depends(get_db),
+):
+    """Valida el token de recuperacion y actualiza la contrasena.
+
+    El token es de un solo uso y expira en 1 hora.
+    La nueva contrasena debe cumplir la politica de complejidad.
+    """
+    token_hash = hashlib.sha256(datos.token.encode()).hexdigest()
+    ahora = datetime.now(timezone.utc)
+    registro = db.query(TokenRecuperacion).filter(
+        TokenRecuperacion.token_hash == token_hash,
+        TokenRecuperacion.usado.is_(False),
+        TokenRecuperacion.expira_en > ahora,
+    ).first()
+    if not registro:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token invalido o expirado",
+        )
+    usuario = db.query(Usuario).filter(
+        Usuario.email == registro.email,
+        Usuario.activo.is_(True),
+    ).first()
+    if not usuario:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token invalido o expirado",
+        )
+    registro.usado = True
+    usuario.password_hash = hashear_password(datos.nueva_password)
+    db.commit()
+    return {"mensaje": "Contrasena actualizada correctamente"}
